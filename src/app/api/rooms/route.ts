@@ -28,16 +28,19 @@ export async function GET() {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  const formatted = rooms.map((room) => ({
-    id: room.id,
-    room_number: room.room_number,
-    floor: room.floor,
-    status: room.status,
-    notes: room.notes,
-    room_type_id: room.room_type_id,
-    type: (room.hotel_management_room_types as { name: string })?.name ?? "Unknown",
-    rate: (room.hotel_management_room_types as { base_rate: number })?.base_rate ?? 0,
-  }));
+  const formatted = rooms.map((room) => {
+    const rt = room.hotel_management_room_types as unknown as { name: string; base_rate: number } | null;
+    return {
+      id: room.id,
+      room_number: room.room_number,
+      floor: room.floor,
+      status: room.status,
+      notes: room.notes,
+      room_type_id: room.room_type_id,
+      type: rt?.name ?? "Unknown",
+      rate: rt?.base_rate ?? 0,
+    };
+  });
 
   // Also fetch room types for the add room form
   const { data: roomTypes } = await supabase
@@ -92,6 +95,7 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
+  const rt = updatedRoom.hotel_management_room_types as unknown as { name: string; base_rate: number } | null;
   const formatted = {
     id: updatedRoom.id,
     room_number: updatedRoom.room_number,
@@ -99,8 +103,8 @@ export async function PATCH(request: NextRequest) {
     status: updatedRoom.status,
     notes: updatedRoom.notes,
     room_type_id: updatedRoom.room_type_id,
-    type: (updatedRoom.hotel_management_room_types as { name: string })?.name ?? "Unknown",
-    rate: (updatedRoom.hotel_management_room_types as { base_rate: number })?.base_rate ?? 0,
+    type: rt?.name ?? "Unknown",
+    rate: rt?.base_rate ?? 0,
   };
 
   return NextResponse.json({ room: formatted });
@@ -156,6 +160,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
+  const rtNew = newRoom.hotel_management_room_types as unknown as { name: string; base_rate: number } | null;
   const formatted = {
     id: newRoom.id,
     room_number: newRoom.room_number,
@@ -163,8 +168,8 @@ export async function POST(request: NextRequest) {
     status: newRoom.status,
     notes: newRoom.notes,
     room_type_id: newRoom.room_type_id,
-    type: (newRoom.hotel_management_room_types as { name: string })?.name ?? "Unknown",
-    rate: (newRoom.hotel_management_room_types as { base_rate: number })?.base_rate ?? 0,
+    type: rtNew?.name ?? "Unknown",
+    rate: rtNew?.base_rate ?? 0,
   };
 
   return NextResponse.json({ room: formatted }, { status: 201 });
