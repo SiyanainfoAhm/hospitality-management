@@ -78,8 +78,21 @@ export default function RoomsPage() {
   const [updateForm, setUpdateForm] = useState({ status: "", notes: "", room_type_id: "" });
   const [updating, setUpdating] = useState(false);
 
-  useEffect(() => {
-    fetch("/api/rooms")
+  const fetchRooms = (params?: { search?: string; floor?: string; type?: string; status?: string }) => {
+    const qp = new URLSearchParams();
+    const s = params?.search ?? search;
+    const f = params?.floor ?? filterFloor;
+    const t = params?.type ?? filterType;
+    const st = params?.status ?? filterStatus;
+
+    if (s) qp.set("search", s);
+    if (f !== "All") qp.set("floor", f);
+    if (t !== "All") qp.set("type", t);
+    if (st !== "All") qp.set("status", st);
+
+    const url = `/api/rooms${qp.toString() ? `?${qp.toString()}` : ""}`;
+    setLoading(true);
+    fetch(url)
       .then((res) => res.json())
       .then((data) => {
         if (data.rooms) setRooms(data.rooms);
@@ -87,15 +100,22 @@ export default function RoomsPage() {
       })
       .catch(() => {})
       .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    fetchRooms();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const filteredRooms = rooms.filter((room) => {
-    if (search && !room.room_number.includes(search)) return false;
-    if (filterFloor !== "All" && room.floor !== parseInt(filterFloor)) return false;
-    if (filterType !== "All" && room.type !== filterType) return false;
-    if (filterStatus !== "All" && room.status !== filterStatus) return false;
-    return true;
-  });
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      fetchRooms();
+    }, 300);
+    return () => clearTimeout(timeout);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search, filterFloor, filterType, filterStatus]);
+
+  const filteredRooms = rooms;
 
   const openAddRoom = () => {
     setAddForm({ room_number: "", floor: "1", room_type_id: roomTypes[0]?.id || "", status: "available", notes: "" });

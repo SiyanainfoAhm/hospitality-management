@@ -68,25 +68,47 @@ export default function FnBPage() {
   const [orderType, setOrderType] = useState("room_service");
   const [selectedRoom, setSelectedRoom] = useState("");
 
-  useEffect(() => {
-    fetch("/api/fnb")
+  const [categories, setCategories] = useState<string[]>(["All"]);
+
+  const fetchMenu = (params?: { category?: string; search?: string }) => {
+    const qp = new URLSearchParams();
+    const cat = params?.category ?? selectedCategory;
+    const s = params?.search ?? search;
+
+    if (cat !== "All") qp.set("category", cat);
+    if (s) qp.set("search", s);
+
+    const url = `/api/fnb${qp.toString() ? `?${qp.toString()}` : ""}`;
+    setLoading(true);
+    fetch(url)
       .then((res) => res.json())
       .then((data) => {
         if (data.items) setMenuItems(data.items);
         if (data.orders) setOrders(data.orders);
         if (data.rooms) setRooms(data.rooms);
+        if (data.items && categories.length <= 1) {
+          const uniqueCats = Array.from(new Set(data.items.map((i: MenuItem) => i.category))) as string[];
+          setCategories(["All", ...uniqueCats]);
+        }
       })
       .catch(() => toast.error("Failed to load F&B data"))
       .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    fetchMenu();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const categories = ["All", ...Array.from(new Set(menuItems.map((i) => i.category)))];
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      fetchMenu();
+    }, 300);
+    return () => clearTimeout(timeout);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedCategory, search]);
 
-  const filteredItems = menuItems.filter((item) => {
-    if (selectedCategory !== "All" && item.category !== selectedCategory) return false;
-    if (search && !item.name.toLowerCase().includes(search.toLowerCase())) return false;
-    return true;
-  });
+  const filteredItems = menuItems;
 
   const addToCart = (item: MenuItem) => {
     const existing = cart.find((c) => c.id === item.id);

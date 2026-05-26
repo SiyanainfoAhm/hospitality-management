@@ -18,6 +18,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
+import { downloadCSV } from "@/lib/export";
 
 interface DailyReport {
   date: string;
@@ -79,7 +80,35 @@ export default function ReportsPage() {
             <h1 className="text-2xl font-bold text-gray-900">Reports</h1>
             <p className="text-sm text-gray-500">Operational analytics and performance metrics</p>
           </div>
-          <Button variant="outline">
+          <Button variant="outline" onClick={() => {
+            if (!dailyReport) return;
+            const headers = ["Metric", "Value"];
+            const rows = [
+              ["Date", dailyReport.date],
+              ["Total Rooms", String(dailyReport.totalRooms)],
+              ["Occupied", String(dailyReport.occupied)],
+              ["Available", String(dailyReport.available)],
+              ["Out of Order", String(dailyReport.outOfOrder)],
+              ["Arrivals", String(dailyReport.arrivals)],
+              ["Departures", String(dailyReport.departures)],
+              ["Stayovers", String(dailyReport.stayovers)],
+              ["No Shows", String(dailyReport.noShows)],
+              ["Cancellations", String(dailyReport.cancellations)],
+              ["Occupancy %", `${dailyReport.occupancyPercent}%`],
+              ["Room Revenue", String(dailyReport.roomRevenue)],
+              ["F&B Revenue", String(dailyReport.fnbRevenue)],
+              ["Tax Collected", String(dailyReport.otherRevenue)],
+              ["Total Revenue", String(dailyReport.totalRevenue)],
+              ["ADR", String(dailyReport.avgRate)],
+              ["RevPAR", String(dailyReport.revpar)],
+            ];
+            if (hkSummary) {
+              rows.push(["HK Total Tasks", String(hkSummary.total)]);
+              rows.push(["HK Completed", String(hkSummary.completed)]);
+              rows.push(["HK Pending", String(hkSummary.pending)]);
+            }
+            downloadCSV(`Daily_Report_${dailyReport.date}`, headers, rows);
+          }}>
             <Download className="h-4 w-4 mr-2" /> Export CSV
           </Button>
         </div>

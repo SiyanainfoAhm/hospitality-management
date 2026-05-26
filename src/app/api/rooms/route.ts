@@ -1,10 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const supabase = createServerSupabaseClient();
+  const { searchParams } = request.nextUrl;
 
-  const { data: rooms, error } = await supabase
+  const floor = searchParams.get("floor");
+  const status = searchParams.get("status");
+  const type = searchParams.get("type");
+  const search = searchParams.get("search");
+
+  let query = supabase
     .from("hotel_management_rooms")
     .select(`
       id,
@@ -21,8 +27,19 @@ export async function GET() {
         max_occupancy
       )
     `)
-    .eq("is_active", true)
-    .order("room_number");
+    .eq("is_active", true);
+
+  if (floor) {
+    query = query.eq("floor", parseInt(floor));
+  }
+  if (status) {
+    query = query.eq("status", status);
+  }
+  if (search) {
+    query = query.ilike("room_number", `%${search}%`);
+  }
+
+  const { data: rooms, error } = await query.order("room_number");
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
@@ -42,13 +59,18 @@ export async function GET() {
     };
   });
 
+  // Filter by room type name (post-query since it's a joined field)
+  const filteredByType = type
+    ? formatted.filter((r) => r.type === type)
+    : formatted;
+
   // Also fetch room types for the add room form
   const { data: roomTypes } = await supabase
     .from("hotel_management_room_types")
     .select("id, name, base_rate")
     .order("name");
 
-  return NextResponse.json({ rooms: formatted, roomTypes: roomTypes || [] });
+  return NextResponse.json({ rooms: filteredByType, roomTypes: roomTypes || [] });
 }
 
 export async function PATCH(request: NextRequest) {

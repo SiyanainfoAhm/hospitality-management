@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const supabase = createServerSupabaseClient();
+  const { searchParams } = request.nextUrl;
 
-  // Fetch menu items with categories
-  const { data: items, error: itemsErr } = await supabase
+  const category = searchParams.get("category");
+  const search = searchParams.get("search");
+
+  let itemsQuery = supabase
     .from("hotel_management_fnb_items")
     .select(`
       id,
@@ -16,8 +19,13 @@ export async function GET() {
       is_available,
       hotel_management_fnb_categories!category_id ( id, name )
     `)
-    .eq("is_available", true)
-    .order("name");
+    .eq("is_available", true);
+
+  if (search) {
+    itemsQuery = itemsQuery.ilike("name", `%${search}%`);
+  }
+
+  const { data: items, error: itemsErr } = await itemsQuery.order("name");
 
   // Fetch recent orders
   const { data: orders, error: ordersErr } = await supabase
@@ -47,17 +55,21 @@ export async function GET() {
     return NextResponse.json({ error: itemsErr?.message || ordersErr?.message }, { status: 500 });
   }
 
-  const formattedItems = (items || []).map((item: any) => {
-    const category = item.hotel_management_fnb_categories as any;
+  let formattedItems = (items || []).map((item: any) => {
+    const cat = item.hotel_management_fnb_categories as any;
     return {
       id: item.id,
       name: item.name,
       description: item.description,
       price: item.price,
-      category: category?.name ?? "Other",
+      category: cat?.name ?? "Other",
       isVeg: item.is_veg,
     };
   });
+
+  if (category) {
+    formattedItems = formattedItems.filter((item) => item.category === category);
+  }
 
   const formattedOrders = (orders || []).map((order: any) => {
     const room = order.hotel_management_rooms as any;

@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { cn } from "@/lib/utils";
+import { downloadCSV, downloadPDF, printInvoice, generateInvoiceHTML } from "@/lib/export";
 import toast from "react-hot-toast";
 
 interface Invoice {
@@ -70,15 +71,37 @@ export default function BillingPage() {
   const [invoiceItems, setInvoiceItems] = useState<InvoiceItem[]>([]);
   const [loadingItems, setLoadingItems] = useState(false);
 
-  useEffect(() => {
-    fetch("/api/billing")
+  const fetchBilling = (params?: { search?: string; status?: string }) => {
+    const qp = new URLSearchParams();
+    const s = params?.search ?? search;
+    const st = params?.status ?? filterStatus;
+
+    if (s) qp.set("search", s);
+    if (st !== "All") qp.set("status", st);
+
+    const url = `/api/billing${qp.toString() ? `?${qp.toString()}` : ""}`;
+    setLoading(true);
+    fetch(url)
       .then((res) => res.json())
       .then((data) => {
         if (data.invoices) setInvoices(data.invoices);
       })
       .catch(() => toast.error("Failed to load billing data"))
       .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    fetchBilling();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      fetchBilling();
+    }, 300);
+    return () => clearTimeout(timeout);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search, filterStatus]);
 
   const openInvoice = async (inv: Invoice) => {
     setSelectedInvoice(inv);
@@ -96,14 +119,7 @@ export default function BillingPage() {
     }
   };
 
-  const filtered = invoices.filter((inv) => {
-    if (search) {
-      const q = search.toLowerCase();
-      if (!inv.guest.toLowerCase().includes(q) && !inv.number.toLowerCase().includes(q) && !inv.room.includes(q)) return false;
-    }
-    if (filterStatus !== "All" && inv.status !== filterStatus) return false;
-    return true;
-  });
+  const filtered = invoices;
 
   const totalRevenue = invoices.reduce((sum, i) => sum + i.paid, 0);
   const totalPending = invoices.reduce((sum, i) => sum + i.balance, 0);
@@ -229,10 +245,28 @@ export default function BillingPage() {
                           <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openInvoice(inv)}>
                             <Eye className="h-3.5 w-3.5" />
                           </Button>
-                          <Button variant="ghost" size="icon" className="h-7 w-7">
+                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => {
+                            downloadCSV(`Invoice_${inv.number}`, [
+                              "Invoice #", "Guest", "Room", "Date", "Subtotal", "Discount", "Tax", "Total", "Paid", "Balance", "Status"
+                            ], [[
+                              inv.number, inv.guest, inv.room, inv.date,
+                              String(inv.subtotal), String(inv.discount), String(inv.tax),
+                              String(inv.total), String(inv.paid), String(inv.balance), inv.status,
+                            ]]);
+                            toast.success("CSV downloaded");
+                          }}>
                             <Download className="h-3.5 w-3.5" />
                           </Button>
-                          <Button variant="ghost" size="icon" className="h-7 w-7">
+                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={async () => {
+                            try {
+                              const res = await fetch(`/api/billing/items?invoice_id=${inv.id}`);
+                              const data = await res.json();
+                              const html = generateInvoiceHTML(inv, data.items || []);
+                              printInvoice(html);
+                            } catch {
+                              toast.error("Failed to print");
+                            }
+                          }}>
                             <Printer className="h-3.5 w-3.5" />
                           </Button>
                         </div>
@@ -316,8 +350,19 @@ export default function BillingPage() {
                 </div>
 
                 <div className="flex justify-end gap-2 pt-2">
-                  <Button variant="outline"><Printer className="h-4 w-4 mr-2" /> Print</Button>
-                  <Button><Download className="h-4 w-4 mr-2" /> Download PDF</Button>
+                  <Button variant="outline" onClick={() => {
+                    if (!selectedInvoice) return;
+                    const html = generateInvoiceHTML(selectedInvoice, invoiceItems);
+                    printInvoice(html);
+                  }}>
+                    <Printer className="h-4 w-4 mr-2" /> Print
+                  </Button>
+                  <Button onClick={() => {
+                    if (!selectedInvoice) return;
+                    downloadPDF(selectedInvoice, invoiceItems);
+                  }}>
+                    <Download className="h-4 w-4 mr-2" /> Download PDF
+                  </Button>
                 </div>
               </div>
             )}

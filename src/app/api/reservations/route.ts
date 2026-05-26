@@ -1,10 +1,14 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const supabase = createServerSupabaseClient();
+  const { searchParams } = request.nextUrl;
 
-  const { data: reservations, error } = await supabase
+  const status = searchParams.get("status");
+  const search = searchParams.get("search");
+
+  let query = supabase
     .from("hotel_management_reservations")
     .select(`
       id,
@@ -27,14 +31,19 @@ export async function GET() {
         hotel_management_room_types ( name )
       ),
       hotel_management_rate_plans!rate_plan_id ( name )
-    `)
-    .order("created_at", { ascending: false });
+    `);
+
+  if (status) {
+    query = query.eq("status", status);
+  }
+
+  const { data: reservations, error } = await query.order("created_at", { ascending: false });
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  const formatted = (reservations || []).map((r: any) => {
+  let formatted = (reservations || []).map((r: any) => {
     const guest = r.hotel_management_guests as any;
     const room = r.hotel_management_rooms as any;
     const roomType = room?.hotel_management_room_types as any;
@@ -60,6 +69,16 @@ export async function GET() {
       notes: r.notes,
     };
   });
+
+  if (search) {
+    const q = search.toLowerCase();
+    formatted = formatted.filter((r) =>
+      r.guest.toLowerCase().includes(q) ||
+      r.booking_code.toLowerCase().includes(q) ||
+      r.mobile.includes(q) ||
+      r.room.includes(q)
+    );
+  }
 
   return NextResponse.json({ reservations: formatted });
 }

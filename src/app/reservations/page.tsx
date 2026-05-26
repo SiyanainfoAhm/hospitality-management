@@ -61,24 +61,39 @@ export default function ReservationsPage() {
   const [filterStatus, setFilterStatus] = useState("All");
   const [showCreateDialog, setShowCreateDialog] = useState(false);
 
-  useEffect(() => {
-    fetch("/api/reservations")
+  const fetchReservations = (params?: { search?: string; status?: string }) => {
+    const qp = new URLSearchParams();
+    const s = params?.search ?? search;
+    const st = params?.status ?? filterStatus;
+
+    if (s) qp.set("search", s);
+    if (st !== "All") qp.set("status", st);
+
+    const url = `/api/reservations${qp.toString() ? `?${qp.toString()}` : ""}`;
+    setLoading(true);
+    fetch(url)
       .then((res) => res.json())
       .then((data) => {
         if (data.reservations) setReservations(data.reservations);
       })
       .catch(() => toast.error("Failed to load reservations"))
       .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    fetchReservations();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const filtered = reservations.filter((r) => {
-    if (search) {
-      const q = search.toLowerCase();
-      if (!r.guest.toLowerCase().includes(q) && !r.booking_code.toLowerCase().includes(q) && !r.mobile.includes(q) && !r.room.includes(q)) return false;
-    }
-    if (filterStatus !== "All" && r.status !== filterStatus) return false;
-    return true;
-  });
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      fetchReservations();
+    }, 300);
+    return () => clearTimeout(timeout);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search, filterStatus]);
+
+  const filtered = reservations;
 
   const handleCheckin = async (reservation: Reservation) => {
     try {

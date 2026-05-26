@@ -1,11 +1,14 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const supabase = createServerSupabaseClient();
+  const { searchParams } = request.nextUrl;
 
-  // Fetch invoices with guest and reservation details
-  const { data: invoices, error: invErr } = await supabase
+  const status = searchParams.get("status");
+  const search = searchParams.get("search");
+
+  let query = supabase
     .from("hotel_management_invoices")
     .select(`
       id,
@@ -27,14 +30,19 @@ export async function GET() {
           room_number
         )
       )
-    `)
-    .order("created_at", { ascending: false });
+    `);
+
+  if (status) {
+    query = query.eq("status", status);
+  }
+
+  const { data: invoices, error: invErr } = await query.order("created_at", { ascending: false });
 
   if (invErr) {
     return NextResponse.json({ error: invErr.message }, { status: 500 });
   }
 
-  const formatted = (invoices || []).map((inv: any) => {
+  let formatted = (invoices || []).map((inv: any) => {
     const guest = inv.hotel_management_guests as any;
     const reservation = inv.hotel_management_reservations as any;
     const room = reservation?.hotel_management_rooms as any;
@@ -55,6 +63,15 @@ export async function GET() {
       status: inv.status,
     };
   });
+
+  if (search) {
+    const q = search.toLowerCase();
+    formatted = formatted.filter((inv) =>
+      inv.guest.toLowerCase().includes(q) ||
+      inv.number.toLowerCase().includes(q) ||
+      inv.room.includes(q)
+    );
+  }
 
   return NextResponse.json({ invoices: formatted });
 }
