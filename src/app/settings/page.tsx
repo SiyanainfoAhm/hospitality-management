@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Select } from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Dialog,
@@ -31,6 +31,8 @@ import {
 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import toast from "react-hot-toast";
+import { PermissionGate } from "@/components/auth/PermissionGate";
+import { useAuth } from "@/lib/auth/useAuth";
 
 interface UserItem {
   id: string;
@@ -109,7 +111,15 @@ export default function SettingsPage() {
   const [users, setUsers] = useState<UserItem[]>(initialUsers);
   const [userDialogOpen, setUserDialogOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<UserItem | null>(null);
-  const [userForm, setUserForm] = useState({ name: "", email: "", role: "front_desk", status: "active" });
+  const [userForm, setUserForm] = useState({
+    name: "",
+    email: "",
+    role: "front_desk",
+    status: "active",
+    password: "",
+  });
+  const [savingUser, setSavingUser] = useState(false);
+  const { hasPermission } = useAuth();
 
   // Room types state
   const [roomTypes, setRoomTypes] = useState<RoomTypeItem[]>(initialRoomTypes);
@@ -132,29 +142,80 @@ export default function SettingsPage() {
   // === User handlers ===
   const openAddUser = () => {
     setEditingUser(null);
-    setUserForm({ name: "", email: "", role: "front_desk", status: "active" });
+    setUserForm({ name: "", email: "", role: "front_desk", status: "active", password: "" });
     setUserDialogOpen(true);
   };
 
   const openEditUser = (user: UserItem) => {
     setEditingUser(user);
-    setUserForm({ name: user.name, email: user.email, role: user.role, status: user.status });
+    setUserForm({
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      status: user.status,
+      password: "",
+    });
     setUserDialogOpen(true);
   };
 
-  const saveUser = () => {
+  const saveUser = async () => {
     if (!userForm.name || !userForm.email) {
       toast.error("Name and email are required");
       return;
     }
-    if (editingUser) {
-      setUsers((prev) => prev.map((u) => u.id === editingUser.id ? { ...u, ...userForm } : u));
-      toast.success(`User "${userForm.name}" updated`);
-    } else {
-      const newUser: UserItem = { id: Date.now().toString(), ...userForm };
-      setUsers((prev) => [...prev, newUser]);
-      toast.success(`User "${userForm.name}" added`);
+
+    if (!editingUser) {
+      if (!hasPermission("user_management", "create")) {
+        toast.error("You do not have permission to create users");
+        return;
+      }
+      if (!userForm.password || userForm.password.length < 8) {
+        toast.error("Password must be at least 8 characters");
+        return;
+      }
+      setSavingUser(true);
+      try {
+        const res = await fetch("/api/admin/create-user", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: userForm.email,
+            password: userForm.password,
+            full_name: userForm.name,
+            role: userForm.role,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          toast.error(data.error || "Failed to create user");
+          return;
+        }
+        const newUser: UserItem = {
+          id: data.user.id,
+          name: data.user.full_name,
+          email: data.user.email,
+          role: data.user.role,
+          status: "active",
+        };
+        setUsers((prev) => [...prev, newUser]);
+        toast.success(`User "${userForm.name}" created`);
+        setUserDialogOpen(false);
+      } catch {
+        toast.error("Failed to create user");
+      } finally {
+        setSavingUser(false);
+      }
+      return;
     }
+
+    setUsers((prev) =>
+      prev.map((u) =>
+        u.id === editingUser.id
+          ? { ...u, name: userForm.name, email: userForm.email, role: userForm.role, status: userForm.status }
+          : u
+      )
+    );
+    toast.success(`User "${userForm.name}" updated`);
     setUserDialogOpen(false);
   };
 
@@ -294,7 +355,7 @@ export default function SettingsPage() {
   };
 
   return (
-    <AppLayout>
+    <AppLayout module="settings">
       <div className="space-y-6 animate-fade-in">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
@@ -315,7 +376,11 @@ export default function SettingsPage() {
             <Card>
               <CardHeader className="flex flex-row items-center justify-between pb-3">
                 <CardTitle className="text-base">User Management</CardTitle>
-                <Button size="sm" onClick={openAddUser}><Plus className="h-4 w-4 mr-1" /> Add User</Button>
+                <PermissionGate module="user_management" action="create">
+                  <Button size="sm" onClick={openAddUser}>
+                    <Plus className="h-4 w-4 mr-1" /> Add User
+                  </Button>
+                </PermissionGate>
               </CardHeader>
               <CardContent className="p-0">
                 <table className="w-full">
@@ -529,25 +594,53 @@ export default function SettingsPage() {
             </div>
             <div>
               <label className="text-sm font-medium text-gray-700 mb-1 block">Role</label>
-              <Select value={userForm.role} onChange={(e) => setUserForm({ ...userForm, role: e.target.value })}>
-                <option value="admin">Admin</option>
-                <option value="front_desk">Front Desk</option>
-                <option value="housekeeping">Housekeeping</option>
-                <option value="fnb">F&B Manager</option>
-                <option value="accounts">Accounts</option>
-              </Select>
+              <SearchableSelect
+                options={[
+                  { label: "Admin", value: "admin" },
+                  { label: "Front Desk", value: "front_desk" },
+                  { label: "Housekeeping", value: "housekeeping" },
+                  { label: "Maintenance Staff", value: "maintenance_staff" },
+                  { label: "F&B Manager", value: "fnb_manager" },
+                  { label: "Accounts", value: "accounts" },
+                ]}
+                value={userForm.role}
+                onChange={(v) => setUserForm({ ...userForm, role: v })}
+                placeholder="Select role"
+                searchPlaceholder="Search role..."
+                emptyText="No role found"
+              />
             </div>
+            {!editingUser && (
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-1 block">Password</label>
+                <Input
+                  type="password"
+                  value={userForm.password}
+                  onChange={(e) => setUserForm({ ...userForm, password: e.target.value })}
+                  placeholder="Minimum 8 characters"
+                />
+              </div>
+            )}
             <div>
               <label className="text-sm font-medium text-gray-700 mb-1 block">Status</label>
-              <Select value={userForm.status} onChange={(e) => setUserForm({ ...userForm, status: e.target.value })}>
-                <option value="active">Active</option>
-                <option value="inactive">Inactive</option>
-              </Select>
+              <SearchableSelect
+                options={[
+                  { label: "Active", value: "active" },
+                  { label: "Inactive", value: "inactive" },
+                ]}
+                value={userForm.status}
+                onChange={(v) => setUserForm({ ...userForm, status: v })}
+                placeholder="Select status"
+                searchPlaceholder="Search status..."
+                emptyText="No status found"
+              />
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setUserDialogOpen(false)}>Cancel</Button>
-            <Button onClick={saveUser}>{editingUser ? "Save Changes" : "Add User"}</Button>
+            <Button onClick={saveUser} disabled={savingUser}>
+              {savingUser ? "Saving..." : editingUser ? "Save Changes" : "Add User"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -687,22 +780,36 @@ export default function SettingsPage() {
               </div>
               <div>
                 <label className="text-sm font-medium text-gray-700 mb-1 block">Category</label>
-                <Select value={fnbForm.category} onChange={(e) => setFnbForm({ ...fnbForm, category: e.target.value })}>
-                  <option value="Beverages">Beverages</option>
-                  <option value="Breakfast">Breakfast</option>
-                  <option value="Starters">Starters</option>
-                  <option value="Main Course">Main Course</option>
-                  <option value="Desserts">Desserts</option>
-                  <option value="Snacks">Snacks</option>
-                </Select>
+                <SearchableSelect
+                  options={[
+                    { label: "Beverages", value: "Beverages" },
+                    { label: "Breakfast", value: "Breakfast" },
+                    { label: "Starters", value: "Starters" },
+                    { label: "Main Course", value: "Main Course" },
+                    { label: "Desserts", value: "Desserts" },
+                    { label: "Snacks", value: "Snacks" },
+                  ]}
+                  value={fnbForm.category}
+                  onChange={(v) => setFnbForm({ ...fnbForm, category: v })}
+                  placeholder="Select category"
+                  searchPlaceholder="Search category..."
+                  emptyText="No category found"
+                />
               </div>
             </div>
             <div>
               <label className="text-sm font-medium text-gray-700 mb-1 block">Type</label>
-              <Select value={fnbForm.veg} onChange={(e) => setFnbForm({ ...fnbForm, veg: e.target.value })}>
-                <option value="true">Vegetarian</option>
-                <option value="false">Non-Vegetarian</option>
-              </Select>
+              <SearchableSelect
+                options={[
+                  { label: "Vegetarian", value: "true" },
+                  { label: "Non-Vegetarian", value: "false" },
+                ]}
+                value={fnbForm.veg}
+                onChange={(v) => setFnbForm({ ...fnbForm, veg: v })}
+                placeholder="Select type"
+                searchPlaceholder="Search type..."
+                emptyText="No results found"
+              />
             </div>
           </div>
           <DialogFooter>

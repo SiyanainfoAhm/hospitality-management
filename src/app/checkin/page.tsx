@@ -104,7 +104,7 @@ export default function CheckinPage() {
 
   if (loading) {
     return (
-      <AppLayout>
+      <AppLayout module="checkin_checkout">
         <div className="flex items-center justify-center py-20">
           <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
         </div>
@@ -113,7 +113,7 @@ export default function CheckinPage() {
   }
 
   return (
-    <AppLayout>
+    <AppLayout module="checkin_checkout">
       <div className="space-y-6 animate-fade-in">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Check-in / Check-out</h1>

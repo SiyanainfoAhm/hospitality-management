@@ -2,7 +2,7 @@ export interface User {
   id: string;
   email: string;
   full_name: string | null;
-  role: "admin" | "front_desk" | "housekeeping" | "fnb" | "accounts";
+  role: "admin" | "front_desk" | "housekeeping" | "fnb_manager" | "fnb" | "accounts";
   avatar_url: string | null;
   is_active: boolean;
   last_login_at: string | null;

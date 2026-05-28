@@ -6,7 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Select } from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   Dialog,
   DialogContent,
@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import { cn, formatCurrency, formatDate } from "@/lib/utils";
 import toast from "react-hot-toast";
+import { PermissionGate } from "@/components/auth/PermissionGate";
 
 interface Reservation {
   id: string;
@@ -60,6 +61,9 @@ export default function ReservationsPage() {
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("All");
   const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [idProofType, setIdProofType] = useState("");
+  const [roomType, setRoomType] = useState("");
+  const [ratePlan, setRatePlan] = useState("rack");
 
   const fetchReservations = (params?: { search?: string; status?: string }) => {
     const qp = new URLSearchParams();
@@ -133,7 +137,7 @@ export default function ReservationsPage() {
 
   if (loading) {
     return (
-      <AppLayout>
+      <AppLayout module="reservations">
         <div className="flex items-center justify-center py-20">
           <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
         </div>
@@ -142,13 +146,14 @@ export default function ReservationsPage() {
   }
 
   return (
-    <AppLayout>
+    <AppLayout module="reservations">
       <div className="space-y-6 animate-fade-in">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Reservations</h1>
             <p className="text-sm text-gray-500">Manage bookings and guest reservations ({reservations.length} total)</p>
           </div>
+          <PermissionGate module="reservations" action="create">
           <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
             <DialogTrigger asChild>
               <Button>
@@ -174,13 +179,21 @@ export default function ReservationsPage() {
                 </div>
                 <div>
                   <label className="text-sm font-medium text-gray-700">ID Proof Type</label>
-                  <Select className="mt-1">
-                    <option value="">Select</option>
-                    <option value="aadhaar">Aadhaar</option>
-                    <option value="pan">PAN Card</option>
-                    <option value="passport">Passport</option>
-                    <option value="driving_license">Driving License</option>
-                  </Select>
+                  <div className="mt-1">
+                    <SearchableSelect
+                      options={[
+                        { label: "Aadhaar", value: "aadhaar" },
+                        { label: "PAN Card", value: "pan" },
+                        { label: "Passport", value: "passport" },
+                        { label: "Driving License", value: "driving_license" },
+                      ]}
+                      value={idProofType}
+                      onChange={setIdProofType}
+                      placeholder="Select"
+                      searchPlaceholder="Search document..."
+                      emptyText="No document found"
+                    />
+                  </div>
                 </div>
                 <div>
                   <label className="text-sm font-medium text-gray-700">ID Proof Number</label>
@@ -188,13 +201,21 @@ export default function ReservationsPage() {
                 </div>
                 <div>
                   <label className="text-sm font-medium text-gray-700">Room Type *</label>
-                  <Select className="mt-1">
-                    <option value="">Select</option>
-                    <option value="standard">Standard (₹2,500/night)</option>
-                    <option value="deluxe">Deluxe (₹3,500/night)</option>
-                    <option value="suite">Suite (₹6,000/night)</option>
-                    <option value="executive">Executive (₹8,500/night)</option>
-                  </Select>
+                  <div className="mt-1">
+                    <SearchableSelect
+                      options={[
+                        { label: "Standard", value: "standard", description: "₹2,500/night" },
+                        { label: "Deluxe", value: "deluxe", description: "₹3,500/night" },
+                        { label: "Suite", value: "suite", description: "₹6,000/night" },
+                        { label: "Executive", value: "executive", description: "₹8,500/night" },
+                      ]}
+                      value={roomType}
+                      onChange={setRoomType}
+                      placeholder="Select"
+                      searchPlaceholder="Search room type..."
+                      emptyText="No room type found"
+                    />
+                  </div>
                 </div>
                 <div>
                   <label className="text-sm font-medium text-gray-700">Check-in Date *</label>
@@ -214,12 +235,21 @@ export default function ReservationsPage() {
                 </div>
                 <div>
                   <label className="text-sm font-medium text-gray-700">Rate Plan</label>
-                  <Select className="mt-1">
-                    <option value="rack">Rack Rate</option>
-                    <option value="corporate">Corporate Rate</option>
-                    <option value="government">Government Rate</option>
-                    <option value="long_stay">Long Stay Rate</option>
-                  </Select>
+                  <div className="mt-1">
+                    <SearchableSelect
+                      options={[
+                        { label: "Rack Rate", value: "rack" },
+                        { label: "Corporate Rate", value: "corporate" },
+                        { label: "Government Rate", value: "government" },
+                        { label: "Long Stay Rate", value: "long_stay" },
+                      ]}
+                      value={ratePlan}
+                      onChange={setRatePlan}
+                      placeholder="Select"
+                      searchPlaceholder="Search rate plan..."
+                      emptyText="No rate plan found"
+                    />
+                  </div>
                 </div>
                 <div>
                   <label className="text-sm font-medium text-gray-700">Deposit Amount</label>
@@ -232,6 +262,7 @@ export default function ReservationsPage() {
               </div>
             </DialogContent>
           </Dialog>
+          </PermissionGate>
         </div>
 
         {/* Search & Filter */}
@@ -247,14 +278,23 @@ export default function ReservationsPage() {
                   onChange={(e) => setSearch(e.target.value)}
                 />
               </div>
-              <Select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
-                <option value="All">All Statuses</option>
-                <option value="confirmed">Confirmed</option>
-                <option value="checked_in">Checked In</option>
-                <option value="checked_out">Checked Out</option>
-                <option value="cancelled">Cancelled</option>
-                <option value="no_show">No Show</option>
-              </Select>
+              <div className="w-44">
+                <SearchableSelect
+                  options={[
+                    { label: "All Statuses", value: "All" },
+                    { label: "Confirmed", value: "confirmed" },
+                    { label: "Checked In", value: "checked_in" },
+                    { label: "Checked Out", value: "checked_out" },
+                    { label: "Cancelled", value: "cancelled" },
+                    { label: "No Show", value: "no_show" },
+                  ]}
+                  value={filterStatus}
+                  onChange={setFilterStatus}
+                  placeholder="All Statuses"
+                  searchPlaceholder="Search status..."
+                  emptyText="No status found"
+                />
+              </div>
               <Badge variant="secondary">{filtered.length} bookings</Badge>
             </div>
           </CardContent>

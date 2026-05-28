@@ -6,12 +6,17 @@ const JWT_SECRET = new TextEncoder().encode(
   process.env.JWT_SECRET || "change-me-in-production-use-a-64-char-random-string"
 );
 
-const PUBLIC_PATHS = ["/login", "/api/auth/login", "/api/auth/logout"];
+const PUBLIC_PATHS = [
+  "/login",
+  "/api/auth/login",
+  "/api/auth/logout",
+  "/api/auth/me",
+];
 
+/** Auth only — module access is enforced in ProtectedRoute (no ?denied= redirects) */
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Allow public paths and static assets
   if (
     PUBLIC_PATHS.some((p) => pathname.startsWith(p)) ||
     pathname.startsWith("/_next") ||
@@ -24,15 +29,13 @@ export async function proxy(request: NextRequest) {
   const token = request.cookies.get("session_token")?.value;
 
   if (!token) {
-    const loginUrl = new URL("/login", request.url);
-    return NextResponse.redirect(loginUrl);
+    return NextResponse.redirect(new URL("/login", request.url));
   }
 
   try {
     await jwtVerify(token, JWT_SECRET);
     return NextResponse.next();
   } catch {
-    // Token invalid or expired — clear it and redirect to login
     const loginUrl = new URL("/login", request.url);
     const response = NextResponse.redirect(loginUrl);
     response.cookies.set("session_token", "", { maxAge: 0 });

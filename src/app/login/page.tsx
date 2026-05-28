@@ -5,18 +5,21 @@ import { useRouter } from "next/navigation";
 import { Building2, Eye, EyeOff, Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useAuth } from "@/lib/auth/useAuth";
 import toast from "react-hot-toast";
 
 const demoCredentials = [
-  { role: "Admin", email: "admin@iimn.ac.in", password: "admin123" },
-  { role: "Front Desk", email: "frontdesk@iimn.ac.in", password: "desk123" },
-  { role: "Housekeeping", email: "hk@iimn.ac.in", password: "hk123" },
-  { role: "F&B Manager", email: "fnb@iimn.ac.in", password: "fnb123" },
-  { role: "Accounts", email: "accounts@iimn.ac.in", password: "acc123" },
+  { role: "Admin", email: "admin@iimdemo.com", password: "password123" },
+  { role: "Front Desk", email: "frontdesk@iimdemo.com", password: "password123" },
+  { role: "Housekeeping", email: "housekeeping1@iimdemo.com", password: "password123" },
+  { role: "Maintenance", email: "maintenance1@iimdemo.com", password: "password123" },
+  { role: "F&B Manager", email: "fnb@iimdemo.com", password: "password123" },
+  { role: "Accounts", email: "accounts@iimdemo.com", password: "password123" },
 ];
 
 export default function LoginPage() {
   const router = useRouter();
+  const { refresh } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -41,6 +44,7 @@ export default function LoginPage() {
       }
 
       toast.success(`Welcome back, ${data.user.full_name}!`);
+      await refresh();
       router.push("/dashboard");
     } catch {
       toast.error("Network error. Please try again.");

@@ -64,7 +64,7 @@ export default function ReportsPage() {
 
   if (loading || !dailyReport) {
     return (
-      <AppLayout>
+      <AppLayout module="reports">
         <div className="flex items-center justify-center py-20">
           <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
         </div>
@@ -73,7 +73,7 @@ export default function ReportsPage() {
   }
 
   return (
-    <AppLayout>
+    <AppLayout module="reports">
       <div className="space-y-6 animate-fade-in">
         <div className="flex items-center justify-between">
           <div>

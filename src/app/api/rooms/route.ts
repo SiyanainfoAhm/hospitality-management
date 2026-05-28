@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
+import { requirePermission, setDbRequestContext } from "@/lib/auth/permissions-server";
 
 export async function GET(request: NextRequest) {
+  const sessionOrDeny = await requirePermission("rooms", "view");
+  if (sessionOrDeny instanceof NextResponse) return sessionOrDeny;
+  await setDbRequestContext(sessionOrDeny.sub, sessionOrDeny.role);
+
   const supabase = createServerSupabaseClient();
   const { searchParams } = request.nextUrl;
 
@@ -74,6 +79,10 @@ export async function GET(request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest) {
+  const sessionOrDeny = await requirePermission("rooms", "update");
+  if (sessionOrDeny instanceof NextResponse) return sessionOrDeny;
+  await setDbRequestContext(sessionOrDeny.sub, sessionOrDeny.role);
+
   const supabase = createServerSupabaseClient();
   const body = await request.json();
 
@@ -133,6 +142,10 @@ export async function PATCH(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const sessionOrDeny = await requirePermission("rooms", "create");
+  if (sessionOrDeny instanceof NextResponse) return sessionOrDeny;
+  await setDbRequestContext(sessionOrDeny.sub, sessionOrDeny.role);
+
   const supabase = createServerSupabaseClient();
   const body = await request.json();
 

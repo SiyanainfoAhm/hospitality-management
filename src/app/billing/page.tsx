@@ -6,7 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Select } from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   Dialog,
   DialogContent,
@@ -126,7 +126,7 @@ export default function BillingPage() {
 
   if (loading) {
     return (
-      <AppLayout>
+      <AppLayout module="billing">
         <div className="flex items-center justify-center py-20">
           <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
         </div>
@@ -135,7 +135,7 @@ export default function BillingPage() {
   }
 
   return (
-    <AppLayout>
+    <AppLayout module="billing">
       <div className="space-y-6 animate-fade-in">
         <div className="flex items-center justify-between">
           <div>
@@ -189,14 +189,23 @@ export default function BillingPage() {
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
                 <Input placeholder="Search invoices..." className="pl-9" value={search} onChange={(e) => setSearch(e.target.value)} />
               </div>
-              <Select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
-                <option value="All">All Statuses</option>
-                <option value="draft">Draft</option>
-                <option value="issued">Issued</option>
-                <option value="paid">Paid</option>
-                <option value="partially_paid">Partially Paid</option>
-                <option value="cancelled">Cancelled</option>
-              </Select>
+              <div className="w-44">
+                <SearchableSelect
+                  options={[
+                    { label: "All Statuses", value: "All" },
+                    { label: "Draft", value: "draft" },
+                    { label: "Issued", value: "issued" },
+                    { label: "Paid", value: "paid" },
+                    { label: "Partially Paid", value: "partially_paid" },
+                    { label: "Cancelled", value: "cancelled" },
+                  ]}
+                  value={filterStatus}
+                  onChange={setFilterStatus}
+                  placeholder="All Statuses"
+                  searchPlaceholder="Search status..."
+                  emptyText="No status found"
+                />
+              </div>
             </div>
           </CardContent>
         </Card>

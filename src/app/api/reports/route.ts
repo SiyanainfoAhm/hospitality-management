@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
+import { requirePermission, setDbRequestContext } from "@/lib/auth/permissions-server";
 
 export async function GET() {
+  const sessionOrDeny = await requirePermission("reports", "view");
+  if (sessionOrDeny instanceof NextResponse) return sessionOrDeny;
+  await setDbRequestContext(sessionOrDeny.sub, sessionOrDeny.role);
+
   const supabase = createServerSupabaseClient();
 
   // Room stats

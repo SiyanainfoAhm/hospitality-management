@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
+import { requirePermission, setDbRequestContext } from "@/lib/auth/permissions-server";
 
 export async function GET(request: NextRequest) {
+  const sessionOrDeny = await requirePermission("billing", "view");
+  if (sessionOrDeny instanceof NextResponse) return sessionOrDeny;
+  await setDbRequestContext(sessionOrDeny.sub, sessionOrDeny.role);
+
   const supabase = createServerSupabaseClient();
   const { searchParams } = request.nextUrl;
 
@@ -77,6 +82,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST() {
-  // Fetch invoice items for a specific invoice (can be extended)
+  const sessionOrDeny = await requirePermission("billing", "create");
+  if (sessionOrDeny instanceof NextResponse) return sessionOrDeny;
   return NextResponse.json({ error: "Use GET with invoice_id query param for items" }, { status: 400 });
 }

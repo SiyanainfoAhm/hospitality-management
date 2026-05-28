@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Select } from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   UtensilsCrossed,
@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import toast from "react-hot-toast";
+import { PermissionGate } from "@/components/auth/PermissionGate";
 
 interface MenuItem {
   id: string;
@@ -195,7 +196,7 @@ export default function FnBPage() {
 
   if (loading) {
     return (
-      <AppLayout>
+      <AppLayout module="fnb_pos">
         <div className="flex items-center justify-center py-20">
           <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
         </div>
@@ -204,7 +205,7 @@ export default function FnBPage() {
   }
 
   return (
-    <AppLayout>
+    <AppLayout module="fnb_pos">
       <div className="space-y-6 animate-fade-in">
         <div className="flex items-center justify-between">
           <div>
@@ -282,18 +283,30 @@ export default function FnBPage() {
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <div className="grid grid-cols-2 gap-2">
-                      <Select value={orderType} onChange={(e) => setOrderType(e.target.value)}>
-                        <option value="room_service">Room Service</option>
-                        <option value="restaurant">Restaurant</option>
-                        <option value="takeaway">Takeaway</option>
-                      </Select>
+                      <SearchableSelect
+                        options={[
+                          { label: "Room Service", value: "room_service" },
+                          { label: "Restaurant", value: "restaurant" },
+                          { label: "Takeaway", value: "takeaway" },
+                        ]}
+                        value={orderType}
+                        onChange={setOrderType}
+                        placeholder="Order type"
+                        searchPlaceholder="Search order type..."
+                        emptyText="No results found"
+                      />
                       {orderType === "room_service" && (
-                        <Select value={selectedRoom} onChange={(e) => setSelectedRoom(e.target.value)}>
-                          <option value="">Select Room</option>
-                          {rooms.map((r) => (
-                            <option key={r.id} value={r.room_number}>Room {r.room_number}</option>
-                          ))}
-                        </Select>
+                        <SearchableSelect
+                          options={rooms.map((r) => ({
+                            label: `Room ${r.room_number}`,
+                            value: r.room_number,
+                          }))}
+                          value={selectedRoom}
+                          onChange={setSelectedRoom}
+                          placeholder="Select Room"
+                          searchPlaceholder="Search room number..."
+                          emptyText="No room found"
+                        />
                       )}
                     </div>
 
@@ -345,10 +358,12 @@ export default function FnBPage() {
                           <Button variant="outline" onClick={() => setCart([])}>
                             <Trash2 className="h-4 w-4 mr-1" /> Clear
                           </Button>
-                          <Button onClick={placeOrder} disabled={placing}>
-                            {placing ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Send className="h-4 w-4 mr-1" />}
-                            Place Order
-                          </Button>
+                          <PermissionGate module="fnb_pos" action="create">
+                            <Button onClick={placeOrder} disabled={placing}>
+                              {placing ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Send className="h-4 w-4 mr-1" />}
+                              Place Order
+                            </Button>
+                          </PermissionGate>
                         </div>
                       </>
                     )}

@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
+import { requirePermission, setDbRequestContext } from "@/lib/auth/permissions-server";
 
 export async function GET(request: NextRequest) {
+  const sessionOrDeny = await requirePermission("billing", "view");
+  if (sessionOrDeny instanceof NextResponse) return sessionOrDeny;
+  await setDbRequestContext(sessionOrDeny.sub, sessionOrDeny.role);
   const supabase = createServerSupabaseClient();
   const invoiceId = request.nextUrl.searchParams.get("invoice_id");
 

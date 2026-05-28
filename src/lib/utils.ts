@@ -58,6 +58,9 @@ export const roomStatusColors: Record<string, string> = {
   dirty: "bg-red-100 text-red-800 border-red-200",
   clean: "bg-teal-100 text-teal-800 border-teal-200",
   under_repair: "bg-yellow-100 text-yellow-800 border-yellow-200",
+  maintenance_resolved: "bg-sky-100 text-sky-800 border-sky-200",
+  cleaning_required: "bg-rose-100 text-rose-800 border-rose-200",
+  needs_inspection: "bg-amber-100 text-amber-900 border-amber-200",
   blocked: "bg-gray-100 text-gray-800 border-gray-200",
 };
 
@@ -69,6 +72,9 @@ export const roomStatusLabels: Record<string, string> = {
   dirty: "Dirty",
   clean: "Clean",
   under_repair: "Under Repair",
+  maintenance_resolved: "Maintenance Resolved",
+  cleaning_required: "Cleaning Required",
+  needs_inspection: "Needs Inspection",
   blocked: "Blocked",
 };
 

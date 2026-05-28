@@ -51,12 +51,17 @@ Cloud-based solution for 82-room institutional guest house operations (IIM Nagpu
 2. Copy the contents of `/supabase/schema.sql` and execute it
 3. This creates all tables, indexes, RLS policies, and triggers
 
-#### 3. Run the Seed Data
+#### 3. Run RBAC (roles & permissions)
+
+1. In the SQL Editor, copy and execute `/supabase/rbac.sql`
+2. This adds the permissions table, helper functions (`get_my_role`, `has_permission`), RLS policies, and demo users
+
+#### 4. Run the Seed Data
 
 1. In the SQL Editor, copy and execute `/supabase/seed.sql`
 2. This populates the database with realistic demo data (82 rooms, guests, reservations, etc.)
 
-#### 4. Configure Environment Variables
+#### 5. Configure Environment Variables
 
 ```bash
 cp .env.example .env.local
@@ -67,15 +72,20 @@ Edit `.env.local` with your Supabase credentials:
 ```
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key-here
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key-here
+JWT_SECRET=your-long-random-secret
+SUPABASE_JWT_SECRET=your-supabase-jwt-secret
 ```
 
-#### 5. Install Dependencies
+`SUPABASE_SERVICE_ROLE_KEY` is **server-only** (API routes, user creation). Never expose it to the browser.
+
+#### 6. Install Dependencies
 
 ```bash
 npm install
 ```
 
-#### 6. Run the Development Server
+#### 7. Run the Development Server
 
 ```bash
 npm run dev
@@ -83,15 +93,28 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-### Demo Credentials
+### Demo Credentials (RBAC testing)
 
-| Role | Email | Password |
-|------|-------|----------|
-| Admin | admin@iimn.ac.in | admin123 |
-| Front Desk | frontdesk@iimn.ac.in | desk123 |
-| Housekeeping | hk@iimn.ac.in | hk123 |
-| F&B Manager | fnb@iimn.ac.in | fnb123 |
-| Accounts | accounts@iimn.ac.in | acc123 |
+After running `rbac.sql`, use these accounts (password for all: **password123**):
+
+| Role | Email | What you should see |
+|------|-------|---------------------|
+| Admin | admin@iimdemo.com | Full sidebar, all actions |
+| Front Desk | frontdesk@iimdemo.com | Dashboard, Rooms, Reservations, Check-in/Out only |
+| Housekeeping | housekeeping@iimdemo.com | Dashboard, Rooms, Housekeeping only |
+| F&B Manager | fnb@iimdemo.com | Dashboard, F&B POS, Billing (read-only) |
+| Accounts | accounts@iimdemo.com | Dashboard, Billing, Reports; Reservations read-only |
+
+Legacy seed users (`admin@iimn.ac.in` / `admin123`, etc.) still work if present from `schema.sql`.
+
+### Role-based access control
+
+- **Database**: `hotel_management_permissions` + `has_permission()` / `get_my_role()` in `rbac.sql`
+- **API**: Every route checks permissions via `requirePermission()` (returns 403 if denied)
+- **UI**: `ProtectedRoute`, filtered sidebar, `PermissionGate` on buttons
+- **User creation**: `POST /api/admin/create-user` (admin only, service role server-side)
+
+To verify RBAC, log in as each demo user and confirm menu items and buttons match the table above. Direct URL access to forbidden modules (e.g. `/settings` as Front Desk) shows **Access Restricted**.
 
 ## Project Structure
 
@@ -116,6 +139,7 @@ src/
 
 supabase/
 ├── schema.sql              # Database schema
+├── rbac.sql                # Roles, permissions, RLS, demo users
 └── seed.sql                # Demo seed data
 ```
 

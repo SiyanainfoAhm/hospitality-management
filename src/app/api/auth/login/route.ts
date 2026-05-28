@@ -1,12 +1,21 @@
 import { NextResponse } from "next/server";
 import { signToken } from "@/lib/auth";
+import { normalizeRole } from "@/lib/permissions";
 import bcrypt from "bcryptjs";
 
 const DEMO_USERS: Record<string, { id: string; role: string; name: string; password: string }> = {
   "admin@iimn.ac.in": { id: "00000000-0000-0000-0000-000000000001", role: "admin", name: "Admin User", password: "admin123" },
   "frontdesk@iimn.ac.in": { id: "00000000-0000-0000-0000-000000000002", role: "front_desk", name: "Priya Sharma", password: "desk123" },
   "hk@iimn.ac.in": { id: "00000000-0000-0000-0000-000000000003", role: "housekeeping", name: "Ramesh Kumar", password: "hk123" },
-  "fnb@iimn.ac.in": { id: "00000000-0000-0000-0000-000000000004", role: "fnb", name: "Suresh Patel", password: "fnb123" },
+  "fnb@iimn.ac.in": { id: "00000000-0000-0000-0000-000000000004", role: "fnb_manager", name: "Suresh Patel", password: "fnb123" },
+  "admin@iimdemo.com": { id: "00000000-0000-0000-0000-000000000011", role: "admin", name: "Demo Admin", password: "password123" },
+  "frontdesk@iimdemo.com": { id: "00000000-0000-0000-0000-000000000012", role: "front_desk", name: "Demo Front Desk", password: "password123" },
+  "housekeeping@iimdemo.com": { id: "00000000-0000-0000-0000-000000000013", role: "housekeeping", name: "Demo Housekeeping", password: "password123" },
+  "housekeeping1@iimdemo.com": { id: "h1000000-0000-0000-0000-000000000001", role: "housekeeping", name: "Housekeeping Staff 1", password: "password123" },
+  "housekeeping2@iimdemo.com": { id: "h1000000-0000-0000-0000-000000000002", role: "housekeeping", name: "Housekeeping Staff 2", password: "password123" },
+  "maintenance1@iimdemo.com": { id: "m1000000-0000-0000-0000-000000000001", role: "maintenance_staff", name: "Maintenance Staff 1", password: "password123" },
+  "fnb@iimdemo.com": { id: "00000000-0000-0000-0000-000000000014", role: "fnb_manager", name: "Demo F&B Manager", password: "password123" },
+  "accounts@iimdemo.com": { id: "00000000-0000-0000-0000-000000000015", role: "accounts", name: "Demo Accounts", password: "password123" },
   "accounts@iimn.ac.in": { id: "00000000-0000-0000-0000-000000000005", role: "accounts", name: "Anita Verma", password: "acc123" },
 };
 
@@ -53,15 +62,20 @@ export async function POST(request: Request) {
         .update({ last_login_at: new Date().toISOString() })
         .eq("id", user.id);
 
+      const role = normalizeRole(user.role);
+      if (!role) {
+        return NextResponse.json({ error: "Invalid user role" }, { status: 403 });
+      }
+
       const token = await signToken({
         sub: user.id,
         email: user.email,
-        role: user.role,
+        role,
         full_name: user.full_name ?? "",
       });
 
       const response = NextResponse.json({
-        user: { id: user.id, email: user.email, full_name: user.full_name, role: user.role },
+        user: { id: user.id, email: user.email, full_name: user.full_name, role },
       });
 
       response.cookies.set("session_token", token, {

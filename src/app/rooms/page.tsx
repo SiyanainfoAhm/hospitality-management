@@ -1,12 +1,13 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import { AppLayout } from "@/components/layout/app-layout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Select } from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   Dialog,
   DialogContent,
@@ -29,6 +30,8 @@ import {
 } from "lucide-react";
 import { cn, roomStatusColors, roomStatusLabels, formatCurrency } from "@/lib/utils";
 import toast from "react-hot-toast";
+import { PermissionGate } from "@/components/auth/PermissionGate";
+import { useAuth } from "@/lib/auth/useAuth";
 
 interface RoomData {
   id: string;
@@ -49,11 +52,40 @@ interface RoomType {
 
 const roomTypeNames = ["All", "Standard Single", "Deluxe Double", "Suite", "Executive Suite"];
 const floors = ["All", "1", "2", "3", "4", "5", "6"];
-const statuses = ["All", "available", "reserved", "checked_in", "checked_out", "dirty", "clean", "under_repair", "blocked"];
+const statuses = [
+  "All",
+  "available",
+  "reserved",
+  "checked_in",
+  "checked_out",
+  "dirty",
+  "clean",
+  "under_repair",
+  "maintenance_resolved",
+  "cleaning_required",
+  "needs_inspection",
+  "blocked",
+];
 
-const allStatuses = ["available", "reserved", "checked_in", "checked_out", "dirty", "clean", "under_repair", "blocked"];
+const allStatuses = [
+  "available",
+  "reserved",
+  "checked_in",
+  "checked_out",
+  "dirty",
+  "clean",
+  "under_repair",
+  "maintenance_resolved",
+  "cleaning_required",
+  "needs_inspection",
+  "blocked",
+];
 
 export default function RoomsPage() {
+  const { role, hasPermission } = useAuth();
+  const canUpdateRoom = hasPermission("rooms", "update");
+  const canCreateMaint = hasPermission("maintenance", "create");
+
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [search, setSearch] = useState("");
   const [filterFloor, setFilterFloor] = useState("All");
@@ -204,7 +236,7 @@ export default function RoomsPage() {
   };
 
   return (
-    <AppLayout>
+    <AppLayout module="rooms">
       <div className="space-y-6 animate-fade-in">
         <div className="flex items-center justify-between">
           <div>
@@ -214,9 +246,11 @@ export default function RoomsPage() {
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <Button size="sm" onClick={openAddRoom}>
-              <Plus className="h-4 w-4 mr-1" /> Add Room
-            </Button>
+            <PermissionGate module="rooms" action="create">
+              <Button size="sm" onClick={openAddRoom}>
+                <Plus className="h-4 w-4 mr-1" /> Add Room
+              </Button>
+            </PermissionGate>
             <Button
               variant={viewMode === "grid" ? "default" : "outline"}
               size="icon"
@@ -248,21 +282,45 @@ export default function RoomsPage() {
                   onChange={(e) => setSearch(e.target.value)}
                 />
               </div>
-              <Select className="w-32" value={filterFloor} onChange={(e) => setFilterFloor(e.target.value)}>
-                {floors.map((f) => (
-                  <option key={f} value={f}>{f === "All" ? "All Floors" : `Floor ${f}`}</option>
-                ))}
-              </Select>
-              <Select className="w-32" value={filterType} onChange={(e) => setFilterType(e.target.value)}>
-                {roomTypeNames.map((t) => (
-                  <option key={t} value={t}>{t === "All" ? "All Types" : t}</option>
-                ))}
-              </Select>
-              <Select className="w-36" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
-                {statuses.map((s) => (
-                  <option key={s} value={s}>{s === "All" ? "All Statuses" : roomStatusLabels[s] || s}</option>
-                ))}
-              </Select>
+              <div className="w-32">
+                <SearchableSelect
+                  options={floors.map((f) => ({
+                    label: f === "All" ? "All Floors" : `Floor ${f}`,
+                    value: f,
+                  }))}
+                  value={filterFloor}
+                  onChange={setFilterFloor}
+                  placeholder="All Floors"
+                  searchPlaceholder="Search floor..."
+                  emptyText="No floor found"
+                />
+              </div>
+              <div className="w-40">
+                <SearchableSelect
+                  options={roomTypeNames.map((t) => ({
+                    label: t === "All" ? "All Types" : t,
+                    value: t,
+                  }))}
+                  value={filterType}
+                  onChange={setFilterType}
+                  placeholder="All Types"
+                  searchPlaceholder="Search room type..."
+                  emptyText="No type found"
+                />
+              </div>
+              <div className="w-44">
+                <SearchableSelect
+                  options={statuses.map((s) => ({
+                    label: s === "All" ? "All Statuses" : roomStatusLabels[s] || s,
+                    value: s,
+                  }))}
+                  value={filterStatus}
+                  onChange={setFilterStatus}
+                  placeholder="All Statuses"
+                  searchPlaceholder="Search status..."
+                  emptyText="No status found"
+                />
+              </div>
               <Badge variant="secondary" className="shrink-0">{filteredRooms.length} rooms</Badge>
             </div>
           </CardContent>
@@ -305,10 +363,23 @@ export default function RoomsPage() {
                   <Button variant="ghost" size="sm" className="h-8 text-xs flex-1 rounded-none" onClick={() => openViewRoom(room)}>
                     <Eye className="h-3 w-3 mr-1" /> View
                   </Button>
-                  <div className="w-px h-5 bg-gray-100" />
-                  <Button variant="ghost" size="sm" className="h-8 text-xs flex-1 rounded-none" onClick={() => openUpdateRoom(room)}>
-                    <Wrench className="h-3 w-3 mr-1" /> Update
-                  </Button>
+                  {canUpdateRoom ? (
+                    <>
+                      <div className="w-px h-5 bg-gray-100" />
+                      <Button variant="ghost" size="sm" className="h-8 text-xs flex-1 rounded-none" onClick={() => openUpdateRoom(room)}>
+                        <Wrench className="h-3 w-3 mr-1" /> Update
+                      </Button>
+                    </>
+                  ) : role === "maintenance_staff" && canCreateMaint ? (
+                    <>
+                      <div className="w-px h-5 bg-gray-100" />
+                      <Button asChild variant="ghost" size="sm" className="h-8 text-xs flex-1 rounded-none">
+                        <Link href={`/maintenance?room_id=${encodeURIComponent(room.id)}`}>
+                          <Wrench className="h-3 w-3 mr-1" /> Report / View Issue
+                        </Link>
+                      </Button>
+                    </>
+                  ) : null}
                 </div>
               </div>
             ))}
@@ -347,9 +418,17 @@ export default function RoomsPage() {
                             <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => openViewRoom(room)}>
                               <Eye className="h-3 w-3 mr-1" /> View
                             </Button>
-                            <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => openUpdateRoom(room)}>
-                              <Wrench className="h-3 w-3 mr-1" /> Update
-                            </Button>
+                            {canUpdateRoom ? (
+                              <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => openUpdateRoom(room)}>
+                                <Wrench className="h-3 w-3 mr-1" /> Update
+                              </Button>
+                            ) : role === "maintenance_staff" && canCreateMaint ? (
+                              <Button asChild variant="ghost" size="sm" className="h-7 text-xs">
+                                <Link href={`/maintenance?room_id=${encodeURIComponent(room.id)}`}>
+                                  <Wrench className="h-3 w-3 mr-1" /> Report / View Issue
+                                </Link>
+                              </Button>
+                            ) : null}
                           </div>
                         </td>
                       </tr>
@@ -381,29 +460,48 @@ export default function RoomsPage() {
               </div>
               <div>
                 <label className="text-sm font-medium text-gray-700 mb-1 block">Floor</label>
-                <Select value={addForm.floor} onChange={(e) => setAddForm({ ...addForm, floor: e.target.value })}>
-                  {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((f) => (
-                    <option key={f} value={f.toString()}>Floor {f}</option>
-                  ))}
-                </Select>
+                <SearchableSelect
+                  options={[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((f) => ({
+                    label: `Floor ${f}`,
+                    value: f.toString(),
+                  }))}
+                  value={addForm.floor}
+                  onChange={(v) => setAddForm({ ...addForm, floor: v })}
+                  placeholder="Select floor"
+                  searchPlaceholder="Search floor..."
+                  emptyText="No floor found"
+                />
               </div>
             </div>
             <div>
               <label className="text-sm font-medium text-gray-700 mb-1 block">Room Type</label>
-              <Select value={addForm.room_type_id} onChange={(e) => setAddForm({ ...addForm, room_type_id: e.target.value })}>
-                <option value="">Select room type...</option>
-                {roomTypes.map((rt) => (
-                  <option key={rt.id} value={rt.id}>{rt.name} — ₹{rt.base_rate.toLocaleString()}/night</option>
-                ))}
-              </Select>
+              <SearchableSelect
+                options={roomTypes.map((rt) => ({
+                  label: rt.name,
+                  value: rt.id,
+                  description: `₹${rt.base_rate.toLocaleString()}/night`,
+                }))}
+                value={addForm.room_type_id}
+                onChange={(v) => setAddForm({ ...addForm, room_type_id: v })}
+                placeholder="Select room type..."
+                searchPlaceholder="Search room type..."
+                emptyText="No room type found"
+              />
             </div>
             <div>
               <label className="text-sm font-medium text-gray-700 mb-1 block">Initial Status</label>
-              <Select value={addForm.status} onChange={(e) => setAddForm({ ...addForm, status: e.target.value })}>
-                <option value="available">Available</option>
-                <option value="blocked">Blocked</option>
-                <option value="under_repair">Under Repair</option>
-              </Select>
+              <SearchableSelect
+                options={[
+                  { label: "Available", value: "available" },
+                  { label: "Blocked", value: "blocked" },
+                  { label: "Under Repair", value: "under_repair" },
+                ]}
+                value={addForm.status}
+                onChange={(v) => setAddForm({ ...addForm, status: v })}
+                placeholder="Select status..."
+                searchPlaceholder="Search status..."
+                emptyText="No status found"
+              />
             </div>
             <div>
               <label className="text-sm font-medium text-gray-700 mb-1 block">Notes (optional)</label>
@@ -467,15 +565,17 @@ export default function RoomsPage() {
           )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setViewDialogOpen(false)}>Close</Button>
-            <Button onClick={() => { setViewDialogOpen(false); if (viewRoom) openUpdateRoom(viewRoom); }}>
-              <Wrench className="h-4 w-4 mr-1" /> Update Room
-            </Button>
+            {canUpdateRoom && (
+              <Button onClick={() => { setViewDialogOpen(false); if (viewRoom) openUpdateRoom(viewRoom); }}>
+                <Wrench className="h-4 w-4 mr-1" /> Update Room
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       {/* Update Room Dialog */}
-      <Dialog open={updateDialogOpen} onOpenChange={setUpdateDialogOpen}>
+      <Dialog open={updateDialogOpen && canUpdateRoom} onOpenChange={setUpdateDialogOpen}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Update Room {updateRoom?.room_number}</DialogTitle>
@@ -485,19 +585,32 @@ export default function RoomsPage() {
             <div className="space-y-4 py-2">
               <div>
                 <label className="text-sm font-medium text-gray-700 mb-1 block">Status</label>
-                <Select value={updateForm.status} onChange={(e) => setUpdateForm({ ...updateForm, status: e.target.value })}>
-                  {allStatuses.map((s) => (
-                    <option key={s} value={s}>{roomStatusLabels[s] || s}</option>
-                  ))}
-                </Select>
+                <SearchableSelect
+                  options={allStatuses.map((s) => ({
+                    label: roomStatusLabels[s] || s,
+                    value: s,
+                  }))}
+                  value={updateForm.status}
+                  onChange={(v) => setUpdateForm({ ...updateForm, status: v })}
+                  placeholder="Select status..."
+                  searchPlaceholder="Search status..."
+                  emptyText="No status found"
+                />
               </div>
               <div>
                 <label className="text-sm font-medium text-gray-700 mb-1 block">Room Type</label>
-                <Select value={updateForm.room_type_id} onChange={(e) => setUpdateForm({ ...updateForm, room_type_id: e.target.value })}>
-                  {roomTypes.map((rt) => (
-                    <option key={rt.id} value={rt.id}>{rt.name} — ₹{rt.base_rate.toLocaleString()}/night</option>
-                  ))}
-                </Select>
+                <SearchableSelect
+                  options={roomTypes.map((rt) => ({
+                    label: rt.name,
+                    value: rt.id,
+                    description: `₹${rt.base_rate.toLocaleString()}/night`,
+                  }))}
+                  value={updateForm.room_type_id}
+                  onChange={(v) => setUpdateForm({ ...updateForm, room_type_id: v })}
+                  placeholder="Select room type..."
+                  searchPlaceholder="Search room type..."
+                  emptyText="No room type found"
+                />
               </div>
               <div>
                 <label className="text-sm font-medium text-gray-700 mb-1 block">Notes</label>
