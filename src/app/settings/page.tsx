@@ -83,13 +83,14 @@ const initialRatePlans: RatePlanItem[] = [
   { id: "5", name: "Special Event", description: "20% premium for special events", modifier: "120%" },
 ];
 
-const initialFnbItems: FnbItem[] = [
-  { id: "1", name: "Tea", price: 40, category: "Beverages", veg: true },
-  { id: "2", name: "Coffee", price: 60, category: "Beverages", veg: true },
-  { id: "3", name: "Masala Dosa", price: 120, category: "Breakfast", veg: true },
-  { id: "4", name: "Paneer Butter Masala", price: 250, category: "Main Course", veg: true },
-  { id: "5", name: "Chicken Biryani", price: 300, category: "Main Course", veg: false },
-  { id: "6", name: "Veg Thali", price: 220, category: "Main Course", veg: true },
+const initialFnbItems: FnbItem[] = [];
+
+const FNB_CATEGORIES = [
+  "Beverages",
+  "Breakfast",
+  "Main Course",
+  "Snacks",
+  "Desserts",
 ];
 
 const rolePermissions = [
@@ -157,6 +158,49 @@ export default function SettingsPage() {
       .finally(() => setUsersLoading(false));
   }, [hasPermission]);
 
+  const fetchFnbMenu = () => {
+    if (!hasPermission("settings", "view")) {
+      setFnbLoading(false);
+      return;
+    }
+    setFnbLoading(true);
+    fetch("/api/fnb/menu")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.items) {
+          setFnbItems(
+            data.items.map(
+              (i: {
+                id: string;
+                name: string;
+                price: number;
+                category: string;
+                veg: boolean;
+              }) => ({
+                id: i.id,
+                name: i.name,
+                price: i.price,
+                category: i.category,
+                veg: i.veg,
+              })
+            )
+          );
+        }
+        if (data.categories?.length) {
+          setFnbCategories(data.categories);
+        } else if (data.error) {
+          toast.error(data.error);
+        }
+      })
+      .catch(() => toast.error("Failed to load F&B menu"))
+      .finally(() => setFnbLoading(false));
+  };
+
+  useEffect(() => {
+    fetchFnbMenu();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasPermission]);
+
   // Room types state
   const [roomTypes, setRoomTypes] = useState<RoomTypeItem[]>(initialRoomTypes);
   const [roomTypeDialogOpen, setRoomTypeDialogOpen] = useState(false);
@@ -171,6 +215,9 @@ export default function SettingsPage() {
 
   // F&B state
   const [fnbItems, setFnbItems] = useState<FnbItem[]>(initialFnbItems);
+  const [fnbCategories, setFnbCategories] = useState<string[]>(FNB_CATEGORIES);
+  const [fnbLoading, setFnbLoading] = useState(true);
+  const [fnbSaving, setFnbSaving] = useState(false);
   const [fnbDialogOpen, setFnbDialogOpen] = useState(false);
   const [editingFnb, setEditingFnb] = useState<FnbItem | null>(null);
   const [fnbForm, setFnbForm] = useState({ name: "", price: "", category: "Beverages", veg: "true" });
@@ -362,32 +409,79 @@ export default function SettingsPage() {
     setFnbDialogOpen(true);
   };
 
-  const saveFnb = () => {
+  const saveFnb = async () => {
     if (!fnbForm.name || !fnbForm.price) {
       toast.error("Name and price are required");
       return;
     }
-    if (editingFnb) {
-      setFnbItems((prev) =>
-        prev.map((i) =>
-          i.id === editingFnb.id
-            ? { ...i, name: fnbForm.name, price: Number(fnbForm.price), category: fnbForm.category, veg: fnbForm.veg === "true" }
-            : i
-        )
-      );
-      toast.success(`"${fnbForm.name}" updated`);
-    } else {
-      const newItem: FnbItem = {
-        id: Date.now().toString(),
-        name: fnbForm.name,
-        price: Number(fnbForm.price),
-        category: fnbForm.category,
-        veg: fnbForm.veg === "true",
-      };
-      setFnbItems((prev) => [...prev, newItem]);
-      toast.success(`"${fnbForm.name}" added to menu`);
+
+    setFnbSaving(true);
+    try {
+      if (editingFnb) {
+        const res = await fetch("/api/fnb/menu", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id: editingFnb.id,
+            name: fnbForm.name,
+            price: Number(fnbForm.price),
+            category: fnbForm.category,
+            veg: fnbForm.veg === "true",
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          toast.error(data.error || "Failed to update item");
+          return;
+        }
+        setFnbItems((prev) =>
+          prev.map((i) =>
+            i.id === editingFnb.id
+              ? {
+                  id: data.item.id,
+                  name: data.item.name,
+                  price: data.item.price,
+                  category: data.item.category,
+                  veg: data.item.veg,
+                }
+              : i
+          )
+        );
+        toast.success(`"${fnbForm.name}" updated`);
+      } else {
+        const res = await fetch("/api/fnb/menu", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: fnbForm.name,
+            price: Number(fnbForm.price),
+            category: fnbForm.category,
+            veg: fnbForm.veg === "true",
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          toast.error(data.error || "Failed to add item");
+          return;
+        }
+        setFnbItems((prev) => [
+          ...prev,
+          {
+            id: data.item.id,
+            name: data.item.name,
+            price: data.item.price,
+            category: data.item.category,
+            veg: data.item.veg,
+          },
+        ]);
+        toast.success(`"${fnbForm.name}" added to menu`);
+      }
+      setFnbDialogOpen(false);
+    } catch {
+      toast.error("Failed to save menu item");
+    } finally {
+      setFnbSaving(false);
     }
-    setFnbDialogOpen(false);
   };
 
   return (
@@ -588,6 +682,13 @@ export default function SettingsPage() {
                 <Button size="sm" onClick={openAddFnb}><Plus className="h-4 w-4 mr-1" /> Add Item</Button>
               </CardHeader>
               <CardContent>
+                {fnbLoading ? (
+                  <p className="text-sm text-gray-500 text-center py-8">Loading menu items...</p>
+                ) : fnbItems.length === 0 ? (
+                  <p className="text-sm text-gray-500 text-center py-8">
+                    No menu items found. Add items or run the database seed.
+                  </p>
+                ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                   {fnbItems.map((item) => (
                     <div key={item.id} className="flex items-center justify-between rounded-lg border p-3">
@@ -609,6 +710,7 @@ export default function SettingsPage() {
                     </div>
                   ))}
                 </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
@@ -831,14 +933,7 @@ export default function SettingsPage() {
               <div>
                 <label className="text-sm font-medium text-gray-700 mb-1 block">Category</label>
                 <SearchableSelect
-                  options={[
-                    { label: "Beverages", value: "Beverages" },
-                    { label: "Breakfast", value: "Breakfast" },
-                    { label: "Starters", value: "Starters" },
-                    { label: "Main Course", value: "Main Course" },
-                    { label: "Desserts", value: "Desserts" },
-                    { label: "Snacks", value: "Snacks" },
-                  ]}
+                  options={fnbCategories.map((c) => ({ label: c, value: c }))}
                   value={fnbForm.category}
                   onChange={(v) => setFnbForm({ ...fnbForm, category: v })}
                   placeholder="Select category"
@@ -863,8 +958,10 @@ export default function SettingsPage() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setFnbDialogOpen(false)}>Cancel</Button>
-            <Button onClick={saveFnb}>{editingFnb ? "Save Changes" : "Add Item"}</Button>
+            <Button variant="outline" onClick={() => setFnbDialogOpen(false)} disabled={fnbSaving}>Cancel</Button>
+            <Button onClick={saveFnb} disabled={fnbSaving}>
+              {fnbSaving ? "Saving..." : editingFnb ? "Save Changes" : "Add Item"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -10,7 +10,6 @@ import {
   Receipt,
   BarChart3,
   Settings,
-  Users,
 } from "lucide-react";
 
 export type Role =
@@ -151,7 +150,6 @@ export const NAV_ITEMS: {
   { label: "Billing", href: "/billing", module: "billing", icon: Receipt },
   { label: "Reports", href: "/reports", module: "reports", icon: BarChart3 },
   { label: "Settings", href: "/settings", module: "settings", icon: Settings },
-  { label: "User Management", href: "/users", module: "user_management", icon: Users },
 ];
 
 /** Path → module for page guards (includes route aliases) */
