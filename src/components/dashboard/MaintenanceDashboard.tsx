@@ -1,7 +1,5 @@
 "use client";
 
-import Link from "next/link";
-import { Button } from "@/components/ui/button";
 import { KpiGrid, QuickLinks, TaskList } from "./DashboardShell";
 
 interface MaintJob {
@@ -31,10 +29,26 @@ export function MaintenanceDashboard({ data }: { data: MaintenanceData }) {
     <div className="space-y-6">
       <KpiGrid
         items={[
-          { label: "My Assigned Repairs", value: String(kpi.open), color: "" },
-          { label: "In Progress", value: String(kpi.inProgress), color: "" },
-          { label: "Urgent Issues", value: String(kpi.urgent), color: "" },
-          { label: "Resolved Today", value: String(kpi.resolvedToday), color: "" },
+          {
+            label: "Active Repairs",
+            value: String(kpi.open),
+            accent: "border-l-blue-500",
+          },
+          {
+            label: "In Progress",
+            value: String(kpi.inProgress),
+            accent: "border-l-amber-500",
+          },
+          {
+            label: "Urgent / High",
+            value: String(kpi.urgent),
+            accent: "border-l-red-500",
+          },
+          {
+            label: "Resolved Today",
+            value: String(kpi.resolvedToday),
+            accent: "border-l-green-500",
+          },
         ]}
       />
 
@@ -46,21 +60,19 @@ export function MaintenanceDashboard({ data }: { data: MaintenanceData }) {
       />
 
       <TaskList
-        title="Assigned repair list"
-        empty="No repair jobs assigned to you"
+        title="Active repair jobs"
+        empty="No active repairs assigned to you"
+        footerHref="/maintenance"
+        footerLabel="Go to Maintenance"
         items={myJobs.map((j) => ({
           id: j.id,
           primary: `Room ${j.room} — ${j.title}`,
-          secondary: j.issue_type,
+          secondary: j.issue_type?.replace(/_/g, " "),
           badge: j.status,
+          priority: j.priority,
+          href: "/maintenance",
         }))}
       />
-
-      <div className="flex justify-center">
-        <Link href="/maintenance">
-          <Button>Go to Maintenance</Button>
-        </Link>
-      </div>
     </div>
   );
 }

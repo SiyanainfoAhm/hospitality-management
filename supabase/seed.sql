@@ -74,7 +74,7 @@ INSERT INTO hotel_management_rooms (room_number, floor, room_type_id, status) VA
   ('301', 3, 'a1000000-0000-0000-0000-000000000001', 'available'),
   ('302', 3, 'a1000000-0000-0000-0000-000000000001', 'checked_in'),
   ('303', 3, 'a1000000-0000-0000-0000-000000000001', 'available'),
-  ('304', 3, 'a1000000-0000-0000-0000-000000000001', 'under_repair'),
+  ('304', 3, 'a1000000-0000-0000-0000-000000000001', 'available'),
   ('305', 3, 'a1000000-0000-0000-0000-000000000001', 'available'),
   ('306', 3, 'a1000000-0000-0000-0000-000000000001', 'available'),
   ('307', 3, 'a1000000-0000-0000-0000-000000000001', 'dirty'),
@@ -102,7 +102,7 @@ INSERT INTO hotel_management_rooms (room_number, floor, room_type_id, status) VA
   ('405', 4, 'a1000000-0000-0000-0000-000000000001', 'checked_out'),
   ('406', 4, 'a1000000-0000-0000-0000-000000000001', 'available'),
   ('407', 4, 'a1000000-0000-0000-0000-000000000001', 'available'),
-  ('408', 4, 'a1000000-0000-0000-0000-000000000001', 'under_repair'),
+  ('408', 4, 'a1000000-0000-0000-0000-000000000001', 'available'),
   ('409', 4, 'a1000000-0000-0000-0000-000000000002', 'available'),
   ('410', 4, 'a1000000-0000-0000-0000-000000000002', 'checked_in'),
   ('411', 4, 'a1000000-0000-0000-0000-000000000002', 'available'),
@@ -223,8 +223,7 @@ INSERT INTO hotel_management_housekeeping_tasks (id, room_id, status, priority, 
   ('a7000000-0000-0000-0000-000000000008', (SELECT id FROM hotel_management_rooms WHERE room_number='208'), 'clean', 'normal', 'Ready for inspection', '2026-05-25 07:30:00', '2026-05-25 08:15:00'),
   ('a7000000-0000-0000-0000-000000000009', (SELECT id FROM hotel_management_rooms WHERE room_number='218'), 'clean', 'normal', 'Completed', '2026-05-25 08:30:00', '2026-05-25 09:10:00'),
   ('a7000000-0000-0000-0000-000000000010', (SELECT id FROM hotel_management_rooms WHERE room_number='315'), 'inspected', 'normal', 'Passed inspection', '2026-05-25 07:00:00', '2026-05-25 07:40:00'),
-  ('a7000000-0000-0000-0000-000000000011', (SELECT id FROM hotel_management_rooms WHERE room_number='414'), 'inspected', 'normal', 'All good', '2026-05-25 07:15:00', '2026-05-25 07:55:00'),
-  ('a7000000-0000-0000-0000-000000000012', (SELECT id FROM hotel_management_rooms WHERE room_number='304'), 'under_repair', 'high', 'AC unit malfunction - technician scheduled', NULL, NULL)
+  ('a7000000-0000-0000-0000-000000000011', (SELECT id FROM hotel_management_rooms WHERE room_number='414'), 'inspected', 'normal', 'All good', '2026-05-25 07:15:00', '2026-05-25 07:55:00')
 ON CONFLICT (id) DO NOTHING;
 
 -- =============================================================================

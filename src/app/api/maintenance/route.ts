@@ -3,10 +3,24 @@ import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { requirePermission, setDbRequestContext } from "@/lib/auth/permissions-server";
 import { canAccess, normalizeRole } from "@/config/rbac";
 
+/** Allowed status changes for maintenance_staff (assigned jobs only). */
 const MAINT_TRANSITIONS: Record<string, string[]> = {
-  assigned: ["in_progress"],
+  open: ["in_progress"],
+  assigned: ["in_progress", "resolved"],
   in_progress: ["resolved"],
 };
+
+function isValidMaintStaffTransition(
+  current: string,
+  next: string,
+  assignedTo: string | null,
+  userId: string
+): boolean {
+  if (current === "open" && next === "in_progress") {
+    return assignedTo === userId;
+  }
+  return (MAINT_TRANSITIONS[current] ?? []).includes(next);
+}
 
 export async function GET() {
   const sessionOrDeny = await requirePermission("maintenance", "view");
@@ -105,6 +119,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "room_id and title are required" }, { status: 400 });
   }
 
+  if (assigned_to && !canAccess(session.role, "maintenance", "assign")) {
+    return NextResponse.json({ error: "You cannot assign technicians" }, { status: 403 });
+  }
+
   const status = assigned_to ? "assigned" : "open";
 
   const { data, error } = await supabase
@@ -117,7 +135,7 @@ export async function POST(request: NextRequest) {
       priority: priority ?? "normal",
       status,
       reported_by: session.sub,
-      assigned_to: assigned_to ?? null,
+      assigned_to: assigned_to || null,
       material_required: material_required ?? null,
       reported_at: new Date().toISOString(),
     })
@@ -172,10 +190,18 @@ export async function PATCH(request: NextRequest) {
     // - can update notes/material fields only
     if (status) {
       const current = String(existing.status ?? "");
-      const allowed = MAINT_TRANSITIONS[current] ?? [];
-      if (!allowed.includes(status)) {
+      if (
+        !isValidMaintStaffTransition(
+          current,
+          status,
+          existing.assigned_to as string | null,
+          session.sub
+        )
+      ) {
         return NextResponse.json(
-          { error: "Invalid status transition" },
+          {
+            error: `Invalid status transition (${current} → ${status}). Start repair before resolving if needed.`,
+          },
           { status: 400 }
         );
       }
@@ -184,28 +210,26 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    // Enforce updates through controlled RPCs (defense-in-depth with service_role).
-    if (status) {
-      const { error: rpcErr } = await supabase.rpc("update_maintenance_status", {
-        request_id: id,
-        new_status: status,
-        note: work_note ?? null,
-        material: material_required ?? null,
-        resolution: resolution_note ?? null,
-      });
-      if (rpcErr) {
-        return NextResponse.json({ error: rpcErr.message }, { status: 400 });
-      }
-    } else {
-      const { error: rpcErr } = await supabase.rpc("update_maintenance_note", {
-        request_id: id,
-        note: work_note ?? null,
-        material: material_required ?? null,
-        resolution: resolution_note ?? null,
-      });
-      if (rpcErr) {
-        return NextResponse.json({ error: rpcErr.message }, { status: 400 });
-      }
+    const updateData: Record<string, unknown> = {};
+    if (status) updateData.status = status;
+    if (resolution_note !== undefined) updateData.resolution_note = resolution_note;
+    if (material_required !== undefined) updateData.material_required = material_required;
+    if (work_note !== undefined) updateData.work_note = work_note;
+
+    if (status === "in_progress") {
+      updateData.started_at = new Date().toISOString();
+    }
+    if (status === "resolved") {
+      updateData.resolved_at = new Date().toISOString();
+    }
+
+    const { error } = await supabase
+      .from("hotel_management_maintenance_requests")
+      .update(updateData)
+      .eq("id", id);
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
     // Only handle room status workflow after a successful status change.
@@ -227,7 +251,22 @@ export async function PATCH(request: NextRequest) {
 
   if (assigned_to && canAccess(session.role, "maintenance", "assign")) {
     updateData.assigned_to = assigned_to;
-    if (!status) updateData.status = "assigned";
+    if (!status) {
+      const current = String(existing.status ?? "");
+      if (current === "open") updateData.status = "assigned";
+    }
+  }
+
+  // Supervisors (admin / front desk): allow resolve from open or assigned without strict workflow
+  if (
+    status === "resolved" &&
+    canAccess(session.role, "maintenance", "assign") &&
+    !isMaintStaff
+  ) {
+    const current = String(existing.status ?? "");
+    if (current === "open" || current === "assigned") {
+      updateData.started_at = updateData.started_at ?? new Date().toISOString();
+    }
   }
 
   if (status === "in_progress") {

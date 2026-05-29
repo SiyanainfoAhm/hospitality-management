@@ -47,6 +47,37 @@ interface Reservation {
   notes: string | null;
 }
 
+interface RoomOption {
+  id: string;
+  room_number: string;
+  status: string;
+  room_type_id: string;
+  type: string;
+  rate: number;
+}
+
+interface RoomTypeOption {
+  id: string;
+  name: string;
+  base_rate: number;
+}
+
+const emptyCreateForm = () => ({
+  guestName: "",
+  mobile: "",
+  email: "",
+  idProofType: "",
+  idProofNumber: "",
+  roomTypeId: "",
+  roomId: "",
+  checkInDate: "",
+  checkOutDate: "",
+  adults: 1,
+  children: 0,
+  ratePlan: "rack",
+  depositAmount: 0,
+});
+
 const statusColors: Record<string, string> = {
   confirmed: "bg-blue-100 text-blue-800",
   checked_in: "bg-green-100 text-green-800",
@@ -61,9 +92,11 @@ export default function ReservationsPage() {
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("All");
   const [showCreateDialog, setShowCreateDialog] = useState(false);
-  const [idProofType, setIdProofType] = useState("");
-  const [roomType, setRoomType] = useState("");
-  const [ratePlan, setRatePlan] = useState("rack");
+  const [createForm, setCreateForm] = useState(emptyCreateForm);
+  const [creating, setCreating] = useState(false);
+  const [availableRooms, setAvailableRooms] = useState<RoomOption[]>([]);
+  const [roomTypes, setRoomTypes] = useState<RoomTypeOption[]>([]);
+  const [loadingRooms, setLoadingRooms] = useState(false);
 
   const fetchReservations = (params?: { search?: string; status?: string }) => {
     const qp = new URLSearchParams();
@@ -96,6 +129,85 @@ export default function ReservationsPage() {
     return () => clearTimeout(timeout);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search, filterStatus]);
+
+  useEffect(() => {
+    if (!showCreateDialog) return;
+    setLoadingRooms(true);
+    fetch("/api/rooms?status=available")
+      .then((res) => res.json())
+      .then((data) => {
+        setAvailableRooms(data.rooms ?? []);
+        setRoomTypes(data.roomTypes ?? []);
+      })
+      .catch(() => toast.error("Failed to load available rooms"))
+      .finally(() => setLoadingRooms(false));
+  }, [showCreateDialog]);
+
+  const roomsForType = createForm.roomTypeId
+    ? availableRooms.filter((r) => r.room_type_id === createForm.roomTypeId)
+    : availableRooms;
+
+  const resetCreateForm = () => setCreateForm(emptyCreateForm());
+
+  const handleCreateReservation = async () => {
+    const {
+      guestName,
+      mobile,
+      email,
+      idProofType,
+      idProofNumber,
+      roomId,
+      checkInDate,
+      checkOutDate,
+      adults,
+      children,
+      ratePlan,
+      depositAmount,
+    } = createForm;
+
+    if (!guestName.trim() || !mobile.trim() || !roomId || !checkInDate || !checkOutDate) {
+      toast.error("Please fill in all required fields");
+      return;
+    }
+
+    setCreating(true);
+    try {
+      const res = await fetch("/api/reservations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          guest_name: guestName.trim(),
+          mobile: mobile.trim(),
+          email: email.trim() || undefined,
+          id_proof_type: idProofType || undefined,
+          id_proof_number: idProofNumber.trim() || undefined,
+          room_id: roomId,
+          check_in_date: checkInDate,
+          check_out_date: checkOutDate,
+          adults,
+          children,
+          rate_plan: ratePlan,
+          deposit_amount: depositAmount,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error ?? "Failed to create reservation");
+        return;
+      }
+
+      toast.success(`Reservation ${data.reservation.booking_code} created!`);
+      setShowCreateDialog(false);
+      resetCreateForm();
+      setSearch("");
+      fetchReservations({ search: "", status: filterStatus });
+    } catch {
+      toast.error("Network error");
+    } finally {
+      setCreating(false);
+    }
+  };
 
   const filtered = reservations;
 
@@ -154,7 +266,10 @@ export default function ReservationsPage() {
             <p className="text-sm text-gray-500">Manage bookings and guest reservations ({reservations.length} total)</p>
           </div>
           <PermissionGate module="reservations" action="create">
-          <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
+          <Dialog open={showCreateDialog} onOpenChange={(open) => {
+            setShowCreateDialog(open);
+            if (!open) resetCreateForm();
+          }}>
             <DialogTrigger asChild>
               <Button>
                 <Plus className="h-4 w-4 mr-2" /> New Reservation
@@ -167,15 +282,30 @@ export default function ReservationsPage() {
               <div className="grid grid-cols-2 gap-4 py-4">
                 <div>
                   <label className="text-sm font-medium text-gray-700">Guest Name *</label>
-                  <Input placeholder="Full name" className="mt-1" />
+                  <Input
+                    placeholder="Full name"
+                    className="mt-1"
+                    value={createForm.guestName}
+                    onChange={(e) => setCreateForm((f) => ({ ...f, guestName: e.target.value }))}
+                  />
                 </div>
                 <div>
                   <label className="text-sm font-medium text-gray-700">Mobile *</label>
-                  <Input placeholder="+91 XXXXX XXXXX" className="mt-1" />
+                  <Input
+                    placeholder="+91 XXXXX XXXXX"
+                    className="mt-1"
+                    value={createForm.mobile}
+                    onChange={(e) => setCreateForm((f) => ({ ...f, mobile: e.target.value }))}
+                  />
                 </div>
                 <div>
                   <label className="text-sm font-medium text-gray-700">Email</label>
-                  <Input placeholder="email@example.com" className="mt-1" />
+                  <Input
+                    placeholder="email@example.com"
+                    className="mt-1"
+                    value={createForm.email}
+                    onChange={(e) => setCreateForm((f) => ({ ...f, email: e.target.value }))}
+                  />
                 </div>
                 <div>
                   <label className="text-sm font-medium text-gray-700">ID Proof Type</label>
@@ -187,8 +317,8 @@ export default function ReservationsPage() {
                         { label: "Passport", value: "passport" },
                         { label: "Driving License", value: "driving_license" },
                       ]}
-                      value={idProofType}
-                      onChange={setIdProofType}
+                      value={createForm.idProofType}
+                      onChange={(value) => setCreateForm((f) => ({ ...f, idProofType: value }))}
                       placeholder="Select"
                       searchPlaceholder="Search document..."
                       emptyText="No document found"
@@ -197,41 +327,108 @@ export default function ReservationsPage() {
                 </div>
                 <div>
                   <label className="text-sm font-medium text-gray-700">ID Proof Number</label>
-                  <Input placeholder="Document number" className="mt-1" />
+                  <Input
+                    placeholder="Document number"
+                    className="mt-1"
+                    value={createForm.idProofNumber}
+                    onChange={(e) => setCreateForm((f) => ({ ...f, idProofNumber: e.target.value }))}
+                  />
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-gray-700">Room Type *</label>
+                  <label className="text-sm font-medium text-gray-700">Room Type</label>
                   <div className="mt-1">
                     <SearchableSelect
                       options={[
-                        { label: "Standard", value: "standard", description: "₹2,500/night" },
-                        { label: "Deluxe", value: "deluxe", description: "₹3,500/night" },
-                        { label: "Suite", value: "suite", description: "₹6,000/night" },
-                        { label: "Executive", value: "executive", description: "₹8,500/night" },
+                        { label: "All types", value: "" },
+                        ...roomTypes.map((rt) => ({
+                          label: rt.name,
+                          value: rt.id,
+                          description: `₹${rt.base_rate.toLocaleString("en-IN")}/night`,
+                        })),
                       ]}
-                      value={roomType}
-                      onChange={setRoomType}
-                      placeholder="Select"
+                      value={createForm.roomTypeId}
+                      onChange={(value) =>
+                        setCreateForm((f) => {
+                          const matching = value
+                            ? availableRooms.filter((r) => r.room_type_id === value)
+                            : availableRooms;
+                          const keepRoom = matching.some((r) => r.id === f.roomId);
+                          return {
+                            ...f,
+                            roomTypeId: value,
+                            roomId: keepRoom ? f.roomId : "",
+                          };
+                        })
+                      }
+                      placeholder={loadingRooms ? "Loading..." : "Filter by type"}
                       searchPlaceholder="Search room type..."
                       emptyText="No room type found"
+                      disabled={loadingRooms}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-700">Room *</label>
+                  <div className="mt-1">
+                    <SearchableSelect
+                      options={roomsForType.map((r) => ({
+                        label: `Room ${r.room_number}`,
+                        value: r.id,
+                        description: r.type,
+                      }))}
+                      value={createForm.roomId}
+                      onChange={(value) => {
+                        const room = availableRooms.find((r) => r.id === value);
+                        setCreateForm((f) => ({
+                          ...f,
+                          roomId: value,
+                          roomTypeId: room?.room_type_id ?? f.roomTypeId,
+                        }));
+                      }}
+                      placeholder={loadingRooms ? "Loading..." : "Select available room"}
+                      searchPlaceholder="Search room..."
+                      emptyText={loadingRooms ? "Loading rooms..." : "No available rooms"}
+                      disabled={loadingRooms}
                     />
                   </div>
                 </div>
                 <div>
                   <label className="text-sm font-medium text-gray-700">Check-in Date *</label>
-                  <Input type="date" className="mt-1" />
+                  <Input
+                    type="date"
+                    className="mt-1"
+                    value={createForm.checkInDate}
+                    onChange={(e) => setCreateForm((f) => ({ ...f, checkInDate: e.target.value }))}
+                  />
                 </div>
                 <div>
                   <label className="text-sm font-medium text-gray-700">Check-out Date *</label>
-                  <Input type="date" className="mt-1" />
+                  <Input
+                    type="date"
+                    className="mt-1"
+                    value={createForm.checkOutDate}
+                    onChange={(e) => setCreateForm((f) => ({ ...f, checkOutDate: e.target.value }))}
+                  />
                 </div>
                 <div>
                   <label className="text-sm font-medium text-gray-700">Adults</label>
-                  <Input type="number" defaultValue={1} min={1} className="mt-1" />
+                  <Input
+                    type="number"
+                    min={1}
+                    className="mt-1"
+                    value={createForm.adults}
+                    onChange={(e) => setCreateForm((f) => ({ ...f, adults: Number(e.target.value) || 1 }))}
+                  />
                 </div>
                 <div>
                   <label className="text-sm font-medium text-gray-700">Children</label>
-                  <Input type="number" defaultValue={0} min={0} className="mt-1" />
+                  <Input
+                    type="number"
+                    min={0}
+                    className="mt-1"
+                    value={createForm.children}
+                    onChange={(e) => setCreateForm((f) => ({ ...f, children: Number(e.target.value) || 0 }))}
+                  />
                 </div>
                 <div>
                   <label className="text-sm font-medium text-gray-700">Rate Plan</label>
@@ -243,8 +440,8 @@ export default function ReservationsPage() {
                         { label: "Government Rate", value: "government" },
                         { label: "Long Stay Rate", value: "long_stay" },
                       ]}
-                      value={ratePlan}
-                      onChange={setRatePlan}
+                      value={createForm.ratePlan}
+                      onChange={(value) => setCreateForm((f) => ({ ...f, ratePlan: value }))}
                       placeholder="Select"
                       searchPlaceholder="Search rate plan..."
                       emptyText="No rate plan found"
@@ -253,12 +450,28 @@ export default function ReservationsPage() {
                 </div>
                 <div>
                   <label className="text-sm font-medium text-gray-700">Deposit Amount</label>
-                  <Input type="number" placeholder="0" className="mt-1" />
+                  <Input
+                    type="number"
+                    placeholder="0"
+                    className="mt-1"
+                    value={createForm.depositAmount || ""}
+                    onChange={(e) => setCreateForm((f) => ({ ...f, depositAmount: Number(e.target.value) || 0 }))}
+                  />
                 </div>
               </div>
               <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={() => setShowCreateDialog(false)}>Cancel</Button>
-                <Button onClick={() => { toast.success("Reservation created!"); setShowCreateDialog(false); }}>Create Reservation</Button>
+                <Button variant="outline" onClick={() => setShowCreateDialog(false)} disabled={creating}>
+                  Cancel
+                </Button>
+                <Button onClick={handleCreateReservation} disabled={creating || loadingRooms}>
+                  {creating ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Creating...
+                    </>
+                  ) : (
+                    "Create Reservation"
+                  )}
+                </Button>
               </div>
             </DialogContent>
           </Dialog>

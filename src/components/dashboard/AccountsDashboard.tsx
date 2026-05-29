@@ -1,7 +1,5 @@
 "use client";
 
-import Link from "next/link";
-import { Button } from "@/components/ui/button";
 import { KpiGrid, QuickLinks, TaskList } from "./DashboardShell";
 import { formatCurrency } from "@/lib/utils";
 
@@ -27,10 +25,10 @@ export function AccountsDashboard({ data }: { data: AccountsData }) {
     <div className="space-y-6">
       <KpiGrid
         items={[
-          { label: "Pending Invoices", value: String(kpi.pendingInvoices), color: "" },
-          { label: "Outstanding", value: formatCurrency(kpi.outstanding), color: "" },
-          { label: "Paid Today", value: formatCurrency(kpi.paidToday), color: "" },
-          { label: "Total Invoices", value: String(kpi.totalInvoices), color: "" },
+          { label: "Pending Invoices", value: String(kpi.pendingInvoices), accent: "border-l-amber-500" },
+          { label: "Outstanding", value: formatCurrency(kpi.outstanding), accent: "border-l-red-500" },
+          { label: "Paid Today", value: formatCurrency(kpi.paidToday), accent: "border-l-green-500" },
+          { label: "Total Invoices", value: String(kpi.totalInvoices), accent: "border-l-blue-500" },
         ]}
       />
 
@@ -44,19 +42,16 @@ export function AccountsDashboard({ data }: { data: AccountsData }) {
       <TaskList
         title="Pending Invoices"
         empty="No pending invoices"
+        footerHref="/billing"
+        footerLabel="Open Billing"
         items={pendingInvoices.map((inv) => ({
           id: inv.id,
           primary: inv.invoice_number,
           secondary: formatCurrency(inv.balance_amount),
           badge: inv.status,
+          href: "/billing",
         }))}
       />
-
-      <div className="flex justify-center">
-        <Link href="/billing">
-          <Button>Open Billing</Button>
-        </Link>
-      </div>
     </div>
   );
 }

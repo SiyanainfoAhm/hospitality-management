@@ -38,6 +38,15 @@ interface MaintRequest {
 interface StaffUser {
   id: string;
   full_name: string;
+  email?: string;
+}
+
+function staffOptions(staff: StaffUser[]) {
+  return staff.map((s) => ({
+    label: s.full_name,
+    value: s.id,
+    description: s.email,
+  }));
 }
 
 const statusColors: Record<string, string> = {
@@ -50,9 +59,11 @@ const statusColors: Record<string, string> = {
 
 export default function MaintenancePage() {
   const { role, user, hasPermission } = useAuth();
+  const canAssign = hasPermission("maintenance", "assign");
   const [requests, setRequests] = useState<MaintRequest[]>([]);
   const [rooms, setRooms] = useState<{ id: string; room_number: string }[]>([]);
   const [staff, setStaff] = useState<StaffUser[]>([]);
+  const [loadingStaff, setLoadingStaff] = useState(false);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [form, setForm] = useState({
@@ -88,24 +99,38 @@ export default function MaintenancePage() {
           );
         }
       });
-    if (hasPermission("maintenance", "assign")) {
-      fetch("/api/users/staff?role=maintenance_staff")
-        .then((res) => res.json())
-        .then((data) => {
-          if (data.users) setStaff(data.users);
-        });
-    }
-  }, [hasPermission]);
+  }, []);
+
+  useEffect(() => {
+    if (!canAssign) return;
+    setLoadingStaff(true);
+    fetch("/api/users/staff?role=maintenance_staff")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.users) setStaff(data.users);
+        else if (data.error) toast.error(data.error);
+      })
+      .catch(() => toast.error("Failed to load maintenance staff"))
+      .finally(() => setLoadingStaff(false));
+  }, [canAssign]);
 
   const reportIssue = async () => {
     if (!form.room_id || !form.title) {
       toast.error("Room and title are required");
       return;
     }
+    const payload = {
+      room_id: form.room_id,
+      title: form.title,
+      description: form.description || undefined,
+      issue_type: form.issue_type,
+      priority: form.priority,
+      ...(form.assigned_to ? { assigned_to: form.assigned_to } : {}),
+    };
     const res = await fetch("/api/maintenance", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
+      body: JSON.stringify(payload),
     });
     const data = await res.json();
     if (!res.ok) {
@@ -114,6 +139,30 @@ export default function MaintenancePage() {
     }
     toast.success("Maintenance request created");
     setDialogOpen(false);
+    setForm({
+      room_id: "",
+      title: "",
+      description: "",
+      issue_type: "other",
+      priority: "normal",
+      assigned_to: "",
+    });
+    load();
+  };
+
+  const assignTechnician = async (id: string, assigned_to: string) => {
+    if (!assigned_to) return;
+    const res = await fetch("/api/maintenance", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, assigned_to }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      toast.error(data.error || "Failed to assign technician");
+      return;
+    }
+    toast.success("Technician assigned");
     load();
   };
 
@@ -123,8 +172,9 @@ export default function MaintenancePage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id, status }),
     });
+    const data = await res.json().catch(() => ({}));
     if (!res.ok) {
-      toast.error("Update failed");
+      toast.error(data.error || "Update failed");
       return;
     }
     toast.success("Status updated");
@@ -192,7 +242,7 @@ export default function MaintenancePage() {
                     </CardTitle>
                     <p className="text-xs text-gray-500 mt-1 capitalize">
                       {req.issue_type} · {req.priority}
-                      {req.assignee ? ` · ${req.assignee}` : ""}
+                      {req.assignee ? ` · ${req.assignee}` : " · Unassigned"}
                     </p>
                   </div>
                   <span
@@ -208,6 +258,35 @@ export default function MaintenancePage() {
                   {req.description && (
                     <p className="text-sm text-gray-600 mb-3">{req.description}</p>
                   )}
+                  {canAssign &&
+                    !req.assigned_to &&
+                    (req.status === "open" || req.status === "assigned") && (
+                    <div className="mb-3 max-w-sm">
+                      <label className="text-xs font-medium text-gray-600">
+                        Assign technician
+                      </label>
+                      <div className="mt-1">
+                        <SearchableSelect
+                          options={staffOptions(staff)}
+                          value=""
+                          onChange={(v) => assignTechnician(req.id, v)}
+                          placeholder={
+                            loadingStaff
+                              ? "Loading staff..."
+                              : staff.length
+                                ? "Select technician"
+                                : "No maintenance staff in system"
+                          }
+                          searchPlaceholder="Search technician..."
+                          emptyText="No technician found"
+                          disabled={loadingStaff || staff.length === 0}
+                        />
+                      </div>
+                      <p className="text-[10px] text-amber-600 mt-1">
+                        Maintenance staff only see jobs assigned to them.
+                      </p>
+                    </div>
+                  )}
                   {role === "maintenance_staff" && (
                     <div className="mb-3 space-y-2">
                       <div>
@@ -222,7 +301,8 @@ export default function MaintenancePage() {
                     </div>
                   )}
                   <div className="flex flex-wrap gap-2">
-                    {(req.status === "open" || req.status === "assigned") &&
+                    {hasPermission("maintenance", "update") &&
+                      (req.status === "open" || req.status === "assigned") &&
                       (role !== "maintenance_staff" || req.assigned_to === user?.id) && (
                       <Button
                         size="sm"
@@ -232,9 +312,21 @@ export default function MaintenancePage() {
                         Start Repair
                       </Button>
                     )}
-                    {req.status === "in_progress" &&
-                      (role !== "maintenance_staff" || req.assigned_to === user?.id) && (
+                    {hasPermission("maintenance", "update") &&
+                      (role !== "maintenance_staff" || req.assigned_to === user?.id) &&
+                      ["assigned", "in_progress"].includes(req.status) && (
                       <Button size="sm" onClick={() => updateStatus(req.id, "resolved")}>
+                        Mark Resolved
+                      </Button>
+                    )}
+                    {hasPermission("maintenance", "assign") &&
+                      role !== "maintenance_staff" &&
+                      req.status === "open" && (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => updateStatus(req.id, "resolved")}
+                      >
                         Mark Resolved
                       </Button>
                     )}
@@ -322,20 +414,30 @@ export default function MaintenancePage() {
                 />
               </div>
             </div>
-            {staff.length > 0 && (
+            {canAssign && (
               <div>
-                <label className="text-sm font-medium">Assign to (optional)</label>
+                <label className="text-sm font-medium">Assign technician</label>
+                <p className="text-xs text-gray-500 mt-0.5 mb-1">
+                  Required for maintenance staff to see this job in their list.
+                </p>
                 <div className="mt-1">
                   <SearchableSelect
                     options={[
-                      { label: "Unassigned", value: "" },
-                      ...staff.map((s) => ({ label: s.full_name, value: s.id })),
+                      { label: "Unassigned (assign later)", value: "" },
+                      ...staffOptions(staff),
                     ]}
                     value={form.assigned_to}
                     onChange={(v) => setForm({ ...form, assigned_to: v })}
-                    placeholder="Unassigned"
-                    searchPlaceholder="Search staff..."
-                    emptyText="No staff found"
+                    placeholder={
+                      loadingStaff
+                        ? "Loading staff..."
+                        : staff.length
+                          ? "Select technician"
+                          : "No maintenance staff found"
+                    }
+                    searchPlaceholder="Search technician..."
+                    emptyText="No technician found"
+                    disabled={loadingStaff}
                   />
                 </div>
               </div>

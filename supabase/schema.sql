@@ -298,7 +298,10 @@ create table public.hotel_management_housekeeping_tasks (
                 )),
   priority      text not null default 'normal'
                 check (priority in ('low', 'normal', 'high', 'urgent')),
+  task_type     text not null default 'cleaning',
+  due_date      timestamptz,
   notes         text,
+  created_by    uuid references public.hotel_management_users on delete set null,
   started_at    timestamptz,
   completed_at  timestamptz,
   created_at    timestamptz not null default now(),
@@ -404,7 +407,7 @@ create table public.hotel_management_invoices (
   paid_amount       numeric not null default 0,
   balance_amount    numeric not null default 0,
   status            text not null default 'draft'
-                    check (status in ('draft', 'issued', 'paid', 'partially_paid', 'cancelled')),
+                    check (status in ('draft', 'issued', 'paid', 'partially_paid', 'overdue', 'cancelled')),
   notes             text,
   created_at        timestamptz not null default now(),
   updated_at        timestamptz not null default now()

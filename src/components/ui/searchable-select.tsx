@@ -34,6 +34,7 @@ export function SearchableSelect({
   emptyText = "No results found",
   disabled,
   className,
+  contentClassName,
 }: {
   options: SearchableSelectOption[];
   value: string;
@@ -43,6 +44,8 @@ export function SearchableSelect({
   emptyText?: string;
   disabled?: boolean;
   className?: string;
+  /** Popover panel width; defaults to at least 240px so labels are readable */
+  contentClassName?: string;
 }) {
   const [open, setOpen] = React.useState(false);
 
@@ -79,9 +82,9 @@ export function SearchableSelect({
         align="start"
         sideOffset={8}
         className={cn(
-          "p-0",
-          "w-[var(--radix-popover-trigger-width)]",
-          "rounded-xl shadow-lg"
+          "p-0 rounded-xl shadow-lg",
+          contentClassName ??
+            "min-w-[max(var(--radix-popover-trigger-width),15rem)] w-max max-w-[min(20rem,calc(100vw-2rem))]"
         )}
       >
         <Command>
@@ -99,18 +102,20 @@ export function SearchableSelect({
                       onChange(opt.value);
                       setOpen(false);
                     }}
-                    className="gap-2"
+                    className="h-auto items-start gap-2 py-2.5"
                   >
                     <Check
                       className={cn(
-                        "h-4 w-4 shrink-0 text-[#1E2A44]",
+                        "mt-0.5 h-4 w-4 shrink-0 text-[#1E2A44]",
                         isSelected ? "opacity-100" : "opacity-0"
                       )}
                     />
-                    <div className="min-w-0">
-                      <div className="truncate">{opt.label}</div>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-medium leading-snug text-gray-900">
+                        {opt.label}
+                      </div>
                       {opt.description ? (
-                        <div className="truncate text-xs text-gray-500">
+                        <div className="text-xs leading-snug text-gray-500">
                           {opt.description}
                         </div>
                       ) : null}

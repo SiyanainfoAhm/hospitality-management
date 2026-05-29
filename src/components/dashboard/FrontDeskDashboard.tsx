@@ -23,10 +23,10 @@ export function FrontDeskDashboard({ data }: { data: FrontDeskData }) {
     <div className="space-y-6">
       <KpiGrid
         items={[
-          { label: "Today Arrivals", value: String(kpi.todayCheckins), color: "" },
-          { label: "Today Departures", value: String(kpi.todayCheckouts), color: "" },
-          { label: "Available", value: String(kpi.available), color: "" },
-          { label: "Reserved", value: String(kpi.reserved), color: "" },
+          { label: "Today Arrivals", value: String(kpi.todayCheckins), accent: "border-l-blue-500" },
+          { label: "Today Departures", value: String(kpi.todayCheckouts), accent: "border-l-amber-500" },
+          { label: "Available", value: String(kpi.available), accent: "border-l-green-500" },
+          { label: "Reserved", value: String(kpi.reserved), accent: "border-l-violet-500" },
         ]}
       />
 
@@ -41,11 +41,14 @@ export function FrontDeskDashboard({ data }: { data: FrontDeskData }) {
       <TaskList
         title="Today's Arrivals"
         empty="No arrivals scheduled today"
+        footerHref="/checkin"
+        footerLabel="Open Check-in"
         items={arrivals.map((a) => ({
           id: a.booking_code,
           primary: `${a.guest} — Room ${a.room}`,
           secondary: a.booking_code,
           badge: a.status,
+          href: "/checkin",
         }))}
       />
 

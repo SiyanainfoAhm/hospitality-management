@@ -45,7 +45,9 @@ export async function GET() {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  const formatted = (tasks || []).map((t: Record<string, unknown>) => {
+  const formatted = (tasks || [])
+    .filter((t: Record<string, unknown>) => t.status !== "under_repair")
+    .map((t: Record<string, unknown>) => {
     const room = t.hotel_management_rooms as { room_number?: string; floor?: number; id?: string } | null;
     const assignedUser = t.hotel_management_users as { full_name?: string } | null;
     let assigneeName: string | null = assignedUser?.full_name ?? null;
@@ -76,7 +78,37 @@ export async function GET() {
     };
   });
 
-  return NextResponse.json({ tasks: formatted });
+  const { data: maintenanceRows } = await supabase
+    .from("hotel_management_maintenance_requests")
+    .select(`
+      id,
+      title,
+      description,
+      status,
+      priority,
+      issue_type,
+      hotel_management_rooms!room_id ( room_number ),
+      assignee:hotel_management_users!assigned_to ( full_name )
+    `)
+    .in("status", ["open", "assigned", "in_progress"])
+    .order("created_at", { ascending: false });
+
+  const underRepair = (maintenanceRows ?? []).map((r: Record<string, unknown>) => {
+    const room = r.hotel_management_rooms as { room_number?: string } | null;
+    const assignee = r.assignee as { full_name?: string } | null;
+    return {
+      id: r.id,
+      room: room?.room_number ?? "?",
+      title: r.title,
+      description: r.description,
+      status: r.status,
+      priority: r.priority,
+      issue_type: r.issue_type,
+      assignee: assignee?.full_name ?? null,
+    };
+  });
+
+  return NextResponse.json({ tasks: formatted, underRepair });
 }
 
 export async function POST(request: NextRequest) {
@@ -106,9 +138,9 @@ export async function POST(request: NextRequest) {
     assigned_to,
     status: "assigned",
     priority: priority ?? "normal",
-    notes: notes ?? null,
+    notes: notes || null,
     task_type: task_type ?? "cleaning",
-    due_date: due_date ?? null,
+    due_date: due_date || null,
     created_by: session.sub,
   };
 

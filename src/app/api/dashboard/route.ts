@@ -146,7 +146,10 @@ export async function GET() {
       };
     });
 
-    const resolvedToday = jobs.filter((j: any) => {
+    const activeStatuses = ["open", "assigned", "in_progress"];
+    const activeJobs = jobs.filter((j) => activeStatuses.includes(j.status as string));
+
+    const resolvedToday = jobs.filter((j) => {
       if (!j.resolved_at) return false;
       const d = new Date(j.resolved_at as string).toISOString().slice(0, 10);
       return d === today;
@@ -155,13 +158,15 @@ export async function GET() {
     return NextResponse.json({
       role,
       kpi: {
-        open: jobs.filter((j) => j.status === "assigned").length,
+        open: activeJobs.length,
         inProgress: jobs.filter((j) => j.status === "in_progress").length,
         resolved: jobs.filter((j) => j.status === "resolved" || j.status === "closed").length,
-        urgent: jobs.filter((j) => j.priority === "urgent" || j.priority === "high").length,
+        urgent: activeJobs.filter(
+          (j) => j.priority === "urgent" || j.priority === "high"
+        ).length,
         resolvedToday,
       },
-      myJobs: jobs,
+      myJobs: activeJobs,
     });
   }
 

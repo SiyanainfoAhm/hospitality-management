@@ -40,6 +40,16 @@ interface HKTask {
   time: string;
 }
 
+interface UnderRepairItem {
+  id: string;
+  room: string;
+  title: string;
+  description?: string;
+  status: string;
+  priority: string;
+  assignee: string | null;
+}
+
 const columns = [
   { key: "dirty", label: "Dirty", color: "border-red-200 bg-red-50", icon: AlertTriangle, iconColor: "text-red-500" },
   { key: "assigned", label: "Assigned", color: "border-amber-200 bg-amber-50", icon: User, iconColor: "text-amber-500" },
@@ -60,11 +70,30 @@ const priorityColors: Record<string, string> = {
 interface StaffUser {
   id: string;
   full_name: string;
+  email?: string;
+  role?: string;
+}
+
+function staffOptions(staff: StaffUser[]) {
+  return staff.map((s) => ({
+    label: s.full_name,
+    value: s.id,
+    description: s.email,
+  }));
+}
+
+function loadHousekeepingStaff(setStaff: (staff: StaffUser[]) => void) {
+  return fetch("/api/users/staff?role=housekeeping")
+    .then((res) => res.json())
+    .then((data) => {
+      if (data.users) setStaff(data.users);
+    });
 }
 
 export default function HousekeepingPage() {
   const { hasPermission, role } = useAuth();
   const [tasks, setTasks] = useState<HKTask[]>([]);
+  const [underRepair, setUnderRepair] = useState<UnderRepairItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [hkStaff, setHkStaff] = useState<StaffUser[]>([]);
   const [rooms, setRooms] = useState<{ id: string; room_number: string }[]>([]);
@@ -83,6 +112,7 @@ export default function HousekeepingPage() {
       .then((res) => res.json())
       .then((data) => {
         if (data.tasks) setTasks(data.tasks);
+        if (data.underRepair) setUnderRepair(data.underRepair);
       })
       .catch(() => toast.error("Failed to load housekeeping tasks"))
       .finally(() => setLoading(false));
@@ -91,11 +121,9 @@ export default function HousekeepingPage() {
   useEffect(() => {
     loadTasks();
     if (hasPermission("housekeeping", "assign")) {
-      fetch("/api/users/staff?role=housekeeping")
-        .then((res) => res.json())
-        .then((data) => {
-          if (data.users) setHkStaff(data.users);
-        });
+      loadHousekeepingStaff(setHkStaff).catch(() =>
+        toast.error("Failed to load housekeeping staff")
+      );
       fetch("/api/rooms")
         .then((res) => res.json())
         .then((data) => {
@@ -110,6 +138,14 @@ export default function HousekeepingPage() {
         });
     }
   }, [hasPermission]);
+
+  useEffect(() => {
+    if (assignOpen && hasPermission("housekeeping", "assign")) {
+      loadHousekeepingStaff(setHkStaff).catch(() =>
+        toast.error("Failed to load housekeeping staff")
+      );
+    }
+  }, [assignOpen, hasPermission]);
 
   const moveTask = async (taskId: string, newStatus: string) => {
     setTasks((prev) => prev.map((t) => t.id === taskId ? { ...t, status: newStatus } : t));
@@ -147,10 +183,18 @@ export default function HousekeepingPage() {
       toast.error("Room and assignee are required");
       return;
     }
+    const payload = {
+      room_id: assignForm.room_id,
+      assigned_to: assignForm.assigned_to,
+      task_type: assignForm.task_type,
+      priority: assignForm.priority,
+      ...(assignForm.notes.trim() ? { notes: assignForm.notes.trim() } : {}),
+      ...(assignForm.due_date ? { due_date: assignForm.due_date } : {}),
+    };
     const res = await fetch("/api/housekeeping", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(assignForm),
+      body: JSON.stringify(payload),
     });
     const data = await res.json();
     if (!res.ok) {
@@ -159,6 +203,14 @@ export default function HousekeepingPage() {
     }
     toast.success("Task assigned");
     setAssignOpen(false);
+    setAssignForm({
+      room_id: "",
+      assigned_to: "",
+      task_type: "cleaning",
+      priority: "normal",
+      notes: "",
+      due_date: "",
+    });
     loadTasks();
   };
 
@@ -181,7 +233,7 @@ export default function HousekeepingPage() {
             <p className="text-sm text-gray-500">Kanban board for room cleaning and maintenance</p>
           </div>
           <div className="flex items-center gap-2">
-            <Badge variant="secondary">{tasks.length} tasks</Badge>
+            <Badge variant="secondary">{tasks.length + underRepair.length} tasks</Badge>
             <PermissionGate module="housekeeping" action="assign">
               <Button size="sm" onClick={() => setAssignOpen(true)}>
                 <Plus className="h-4 w-4 mr-1" /> Assign Task
@@ -193,7 +245,21 @@ export default function HousekeepingPage() {
         {/* Kanban Board */}
         <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
           {columns.map((col) => {
-            const colTasks = tasks.filter((t) => t.status === col.key);
+            const colTasks =
+              col.key === "under_repair"
+                ? underRepair.map((item) => ({
+                    id: item.id,
+                    room: item.room,
+                    priority: item.priority,
+                    notes: item.title,
+                    assignee: item.assignee,
+                    time: item.status.replace("_", " "),
+                    status: "under_repair",
+                    isMaintenance: true,
+                  }))
+                : tasks
+                    .filter((t) => t.status === col.key)
+                    .map((t) => ({ ...t, isMaintenance: false }));
             return (
               <div key={col.key} className="space-y-3">
                 <div className={cn("rounded-lg border p-3", col.color)}>
@@ -219,46 +285,50 @@ export default function HousekeepingPage() {
                         {task.notes && (
                           <p className="text-[11px] text-gray-500 mb-2 line-clamp-2">{task.notes}</p>
                         )}
+                        {"isMaintenance" in task && task.isMaintenance && (
+                          <p className="text-[10px] text-purple-600 mb-2 capitalize">
+                            Maintenance · {task.time}
+                          </p>
+                        )}
                         {task.assignee && (
                           <p className="text-[11px] text-gray-600 flex items-center gap-1 mb-2">
                             <User className="h-3 w-3" /> {task.assignee}
                           </p>
                         )}
-                        <div className="flex items-center justify-between">
+                        <div className="mt-2 space-y-2">
+                          {!("isMaintenance" in task && task.isMaintenance) && (
                           <span className="text-[10px] text-gray-400 flex items-center gap-1">
                             <Clock className="h-3 w-3" /> {task.time}
                           </span>
+                          )}
                           {col.key === "dirty" && hasPermission("housekeeping", "assign") && (
-                            <div className="w-44">
+                            <div className="w-full">
                               <SearchableSelect
-                                options={hkStaff.map((s) => ({
-                                  label: s.full_name,
-                                  value: s.id,
-                                }))}
+                                options={staffOptions(hkStaff)}
                                 value=""
                                 onChange={(v) => {
                                   if (v) assignTask(task.id, v);
                                 }}
-                                placeholder="Assign"
-                                searchPlaceholder="Search staff..."
+                                placeholder="Assign staff"
+                                searchPlaceholder="Search by name or email..."
                                 emptyText="No staff found"
-                                className="h-6 px-2 text-[10px]"
+                                className="h-8 px-2 text-xs w-full"
                               />
                             </div>
                           )}
                           {col.key === "assigned" && (
-                            <Button size="sm" className="h-6 text-[10px] px-2" onClick={() => moveTask(task.id, "cleaning")}>
+                            <Button size="sm" className="h-7 text-xs px-2 w-full" onClick={() => moveTask(task.id, "cleaning")}>
                               Start <ArrowRight className="h-3 w-3 ml-0.5" />
                             </Button>
                           )}
                           {col.key === "cleaning" && (
-                            <Button size="sm" className="h-6 text-[10px] px-2" variant="gold" onClick={() => moveTask(task.id, "clean")}>
+                            <Button size="sm" className="h-7 text-xs px-2 w-full" variant="gold" onClick={() => moveTask(task.id, "clean")}>
                               Done <CheckCircle className="h-3 w-3 ml-0.5" />
                             </Button>
                           )}
                           {col.key === "clean" &&
                             hasPermission("housekeeping", "assign") && (
-                            <Button size="sm" className="h-6 text-[10px] px-2" variant="outline" onClick={() => moveTask(task.id, "inspected")}>
+                            <Button size="sm" className="h-7 text-xs px-2 w-full" variant="outline" onClick={() => moveTask(task.id, "inspected")}>
                               Inspect
                             </Button>
                           )}
@@ -297,19 +367,18 @@ export default function HousekeepingPage() {
             </div>
             <div>
               <label className="text-sm font-medium">Assign to</label>
+              <p className="text-xs text-gray-500 mt-0.5 mb-1">
+                All active users with the Housekeeping role ({hkStaff.length})
+              </p>
               <div className="mt-1">
                 <SearchableSelect
-                  options={hkStaff.map((s) => ({
-                    label: s.full_name,
-                    value: s.id,
-                    description: "Housekeeping",
-                  }))}
+                  options={staffOptions(hkStaff)}
                   value={assignForm.assigned_to}
                   onChange={(v) =>
                     setAssignForm({ ...assignForm, assigned_to: v })
                   }
                   placeholder="Select staff"
-                  searchPlaceholder="Search staff..."
+                  searchPlaceholder="Search by name or email..."
                   emptyText="No staff found"
                 />
               </div>

@@ -23,10 +23,13 @@ import {
   CreditCard,
   Building2,
   Loader2,
+  Wallet,
 } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import { downloadCSV, downloadPDF, printInvoice, generateInvoiceHTML } from "@/lib/export";
+import { RecordPaymentModal } from "@/components/billing/record-payment-modal";
+import { canRecordInvoicePayment } from "@/config/rbac";
 import toast from "react-hot-toast";
 
 interface Invoice {
@@ -59,17 +62,22 @@ const invoiceStatusColors: Record<string, string> = {
   issued: "bg-blue-100 text-blue-800",
   paid: "bg-green-100 text-green-800",
   partially_paid: "bg-amber-100 text-amber-800",
+  overdue: "bg-orange-100 text-orange-800",
   cancelled: "bg-red-100 text-red-800",
 };
 
 export default function BillingPage() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [kpis, setKpis] = useState({ total_collected: 0, pending_amount: 0, total_invoices: 0 });
+  const [userRole, setUserRole] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("All");
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
+  const [paymentInvoice, setPaymentInvoice] = useState<Invoice | null>(null);
   const [invoiceItems, setInvoiceItems] = useState<InvoiceItem[]>([]);
   const [loadingItems, setLoadingItems] = useState(false);
+  const canRecordPayment = canRecordInvoicePayment(userRole, "billing");
 
   const fetchBilling = (params?: { search?: string; status?: string }) => {
     const qp = new URLSearchParams();
@@ -85,6 +93,7 @@ export default function BillingPage() {
       .then((res) => res.json())
       .then((data) => {
         if (data.invoices) setInvoices(data.invoices);
+        if (data.kpis) setKpis(data.kpis);
       })
       .catch(() => toast.error("Failed to load billing data"))
       .finally(() => setLoading(false));
@@ -92,6 +101,12 @@ export default function BillingPage() {
 
   useEffect(() => {
     fetchBilling();
+    fetch("/api/auth/me")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.user?.role) setUserRole(data.user.role);
+      })
+      .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -121,8 +136,9 @@ export default function BillingPage() {
 
   const filtered = invoices;
 
-  const totalRevenue = invoices.reduce((sum, i) => sum + i.paid, 0);
-  const totalPending = invoices.reduce((sum, i) => sum + i.balance, 0);
+  const totalRevenue = kpis.total_collected;
+  const totalPending = kpis.pending_amount;
+  const totalInvoiceCount = kpis.total_invoices;
 
   if (loading) {
     return (
@@ -175,7 +191,7 @@ export default function BillingPage() {
               </div>
               <div>
                 <p className="text-xs text-gray-500">Total Invoices</p>
-                <p className="text-xl font-bold text-gray-900">{invoices.length}</p>
+                <p className="text-xl font-bold text-gray-900">{totalInvoiceCount}</p>
               </div>
             </CardContent>
           </Card>
@@ -197,6 +213,7 @@ export default function BillingPage() {
                     { label: "Issued", value: "issued" },
                     { label: "Paid", value: "paid" },
                     { label: "Partially Paid", value: "partially_paid" },
+                    { label: "Overdue", value: "overdue" },
                     { label: "Cancelled", value: "cancelled" },
                   ]}
                   value={filterStatus}
@@ -251,10 +268,21 @@ export default function BillingPage() {
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1">
-                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openInvoice(inv)}>
+                          <Button variant="ghost" size="icon" className="h-7 w-7" title="View Invoice" onClick={() => openInvoice(inv)}>
                             <Eye className="h-3.5 w-3.5" />
                           </Button>
-                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => {
+                          {canRecordPayment && inv.balance > 0 && inv.status !== "cancelled" && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7"
+                              title="Record Payment"
+                              onClick={() => setPaymentInvoice(inv)}
+                            >
+                              <Wallet className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
+                          <Button variant="ghost" size="icon" className="h-7 w-7" title="Download Invoice" onClick={() => {
                             downloadCSV(`Invoice_${inv.number}`, [
                               "Invoice #", "Guest", "Room", "Date", "Subtotal", "Discount", "Tax", "Total", "Paid", "Balance", "Status"
                             ], [[
@@ -266,7 +294,7 @@ export default function BillingPage() {
                           }}>
                             <Download className="h-3.5 w-3.5" />
                           </Button>
-                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={async () => {
+                          <Button variant="ghost" size="icon" className="h-7 w-7" title="Print Invoice" onClick={async () => {
                             try {
                               const res = await fetch(`/api/billing/items?invoice_id=${inv.id}`);
                               const data = await res.json();
@@ -359,6 +387,14 @@ export default function BillingPage() {
                 </div>
 
                 <div className="flex justify-end gap-2 pt-2">
+                  {canRecordPayment && selectedInvoice.balance > 0 && selectedInvoice.status !== "cancelled" && (
+                    <Button variant="outline" onClick={() => {
+                      setPaymentInvoice(selectedInvoice);
+                      setSelectedInvoice(null);
+                    }}>
+                      <Wallet className="h-4 w-4 mr-2" /> Record Payment
+                    </Button>
+                  )}
                   <Button variant="outline" onClick={() => {
                     if (!selectedInvoice) return;
                     const html = generateInvoiceHTML(selectedInvoice, invoiceItems);
@@ -377,6 +413,27 @@ export default function BillingPage() {
             )}
           </DialogContent>
         </Dialog>
+
+        <RecordPaymentModal
+          open={!!paymentInvoice}
+          onOpenChange={(open) => {
+            if (!open) setPaymentInvoice(null);
+          }}
+          invoice={
+            paymentInvoice
+              ? {
+                  id: paymentInvoice.id,
+                  number: paymentInvoice.number,
+                  guest: paymentInvoice.guest,
+                  balance: paymentInvoice.balance,
+                }
+              : null
+          }
+          onSuccess={() => {
+            fetchBilling();
+            toast.success("Payment recorded successfully");
+          }}
+        />
       </div>
     </AppLayout>
   );

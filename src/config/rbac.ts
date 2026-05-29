@@ -72,13 +72,13 @@ export const ROLE_PERMISSIONS: Record<
     rooms: ["view"],
     reservations: ["view", "create", "update"],
     checkin_checkout: ["view", "create", "update"],
-    maintenance: ["view", "create"],
+    maintenance: ["view", "create", "assign"],
   },
   housekeeping: {
     dashboard: ["view"],
     rooms: ["view"],
     housekeeping: ["view", "update"],
-    maintenance: ["view", "create"],
+    maintenance: ["view", "create", "assign"],
   },
   maintenance_staff: {
     dashboard: ["view"],
@@ -109,6 +109,18 @@ export function normalizeRole(role: string): Role | null {
     maintenance: "maintenance_staff",
   };
   return map[role] ?? null;
+}
+
+export function canRecordInvoicePayment(
+  role: string | null | undefined,
+  context: "checkout" | "billing" = "billing"
+): boolean {
+  if (!role) return false;
+  const normalized = normalizeRole(role);
+  if (!normalized) return false;
+  if (normalized === "admin" || normalized === "accounts") return true;
+  if (normalized === "front_desk" && context === "checkout") return true;
+  return false;
 }
 
 export function canAccess(

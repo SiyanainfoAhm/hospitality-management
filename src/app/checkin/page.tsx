@@ -6,6 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { SettlementModal } from "@/components/billing/settlement-modal";
 import {
   LogIn,
   LogOut,
@@ -14,7 +15,6 @@ import {
   BedDouble,
   Clock,
   CheckCircle,
-  FileText,
   Loader2,
 } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/utils";
@@ -46,8 +46,9 @@ export default function CheckinPage() {
   const [loading, setLoading] = useState(true);
   const [processingIds, setProcessingIds] = useState<string[]>([]);
   const [completedIds, setCompletedIds] = useState<string[]>([]);
+  const [settlementReservation, setSettlementReservation] = useState<ReservationItem | null>(null);
 
-  useEffect(() => {
+  const loadData = () => {
     fetch("/api/checkin")
       .then((res) => res.json())
       .then((data) => {
@@ -56,6 +57,10 @@ export default function CheckinPage() {
       })
       .catch(() => toast.error("Failed to load check-in data"))
       .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    loadData();
   }, []);
 
   const handleCheckIn = async (reservation: ReservationItem) => {
@@ -80,25 +85,40 @@ export default function CheckinPage() {
     }
   };
 
-  const handleCheckOut = async (reservation: ReservationItem) => {
-    setProcessingIds((prev) => [...prev, reservation.id]);
+  const handleCheckoutConfirm = async (payload: {
+    amount_received: number;
+    payment_mode: string;
+    reference_number: string;
+    remarks: string;
+  }) => {
+    if (!settlementReservation) return;
+
+    setProcessingIds((prev) => [...prev, settlementReservation.id]);
     try {
       const res = await fetch("/api/checkin", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reservation_id: reservation.id, action: "checkout" }),
+        body: JSON.stringify({
+          reservation_id: settlementReservation.id,
+          action: "checkout",
+          settlement: payload,
+        }),
       });
       const data = await res.json();
       if (!res.ok) {
         toast.error(data.error || "Check-out failed");
-        return;
+        throw new Error(data.error);
       }
-      setCompletedIds((prev) => [...prev, reservation.id]);
-      toast.success(`${reservation.guest_name} checked out. Room marked for cleaning.`);
+      setCompletedIds((prev) => [...prev, settlementReservation.id]);
+      const statusLabel = data.invoice_status?.replace("_", " ") ?? "settled";
+      toast.success(
+        `${settlementReservation.guest_name} checked out. Invoice ${statusLabel}.`
+      );
+      setSettlementReservation(null);
     } catch {
-      toast.error("Network error");
+      throw new Error("checkout failed");
     } finally {
-      setProcessingIds((prev) => prev.filter((id) => id !== reservation.id));
+      setProcessingIds((prev) => prev.filter((id) => id !== settlementReservation.id));
     }
   };
 
@@ -223,68 +243,71 @@ export default function CheckinPage() {
                 </CardContent>
               </Card>
             ) : (
-              departures.map((dep) => {
-                const tax = Math.round(dep.total_amount * 0.18);
-                const grandTotal = dep.total_amount + tax;
-                const balance = grandTotal - dep.deposit_amount;
-                return (
-                  <Card key={dep.id} className={completedIds.includes(dep.id) ? "opacity-50" : ""}>
-                    <CardContent className="p-4">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-4">
-                          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-orange-100 text-orange-700">
-                            <User className="h-5 w-5" />
-                          </div>
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <h3 className="text-sm font-semibold text-gray-900">{dep.guest_name}</h3>
-                              <Badge variant="secondary" className="text-[10px]">{dep.booking_code}</Badge>
-                            </div>
-                            <div className="flex items-center gap-3 mt-1 text-xs text-gray-500">
-                              <span>Room {dep.room_number} ({dep.room_type})</span>
-                              <span>Since {formatDate(dep.check_in_date)}</span>
-                              <span>{dep.nights} nights</span>
-                              <span>Due: {formatDate(dep.check_out_date)}</span>
-                            </div>
-                            {dep.notes && <p className="text-[11px] text-gray-400 mt-1">{dep.notes}</p>}
-                          </div>
+              departures.map((dep) => (
+                <Card key={dep.id} className={completedIds.includes(dep.id) ? "opacity-50" : ""}>
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-4">
+                        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-orange-100 text-orange-700">
+                          <User className="h-5 w-5" />
                         </div>
-                        <div className="flex items-center gap-4">
-                          <div className="text-right text-xs space-y-0.5">
-                            <p>Room Charges: {formatCurrency(dep.total_amount)}</p>
-                            <p>GST (18%): {formatCurrency(tax)}</p>
-                            <p>Deposit: -{formatCurrency(dep.deposit_amount)}</p>
-                            <p className="font-semibold text-sm text-gray-900 pt-1 border-t">Balance: {formatCurrency(balance)}</p>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h3 className="text-sm font-semibold text-gray-900">{dep.guest_name}</h3>
+                            <Badge variant="secondary" className="text-[10px]">{dep.booking_code}</Badge>
                           </div>
-                          {completedIds.includes(dep.id) ? (
-                            <Badge variant="secondary"><CheckCircle className="h-3 w-3 mr-1" />Checked Out</Badge>
-                          ) : (
-                            <div className="flex flex-col gap-1">
-                              <Button
-                                size="sm"
-                                variant="gold"
-                                onClick={() => handleCheckOut(dep)}
-                                disabled={processingIds.includes(dep.id)}
-                              >
-                                {processingIds.includes(dep.id) ? (
-                                  <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                                ) : (
-                                  <LogOut className="h-4 w-4 mr-1" />
-                                )}
-                                Check Out
-                              </Button>
-                            </div>
-                          )}
+                          <div className="flex items-center gap-3 mt-1 text-xs text-gray-500">
+                            <span>Room {dep.room_number} ({dep.room_type})</span>
+                            <span>Since {formatDate(dep.check_in_date)}</span>
+                            <span>{dep.nights} nights</span>
+                            <span>Due: {formatDate(dep.check_out_date)}</span>
+                          </div>
+                          {dep.notes && <p className="text-[11px] text-gray-400 mt-1">{dep.notes}</p>}
                         </div>
                       </div>
-                    </CardContent>
-                  </Card>
-                );
-              })
+                      <div className="flex items-center gap-4">
+                        <div className="text-right text-xs space-y-0.5">
+                          <p>Room Charges: {formatCurrency(dep.total_amount)}</p>
+                          <p>Deposit: {formatCurrency(dep.deposit_amount)}</p>
+                          <p className="text-[11px] text-gray-400">Settlement at checkout</p>
+                        </div>
+                        {completedIds.includes(dep.id) ? (
+                          <Badge variant="secondary"><CheckCircle className="h-3 w-3 mr-1" />Checked Out</Badge>
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant="gold"
+                            onClick={() => setSettlementReservation(dep)}
+                            disabled={processingIds.includes(dep.id)}
+                          >
+                            {processingIds.includes(dep.id) ? (
+                              <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                            ) : (
+                              <LogOut className="h-4 w-4 mr-1" />
+                            )}
+                            Check Out
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))
             )}
           </TabsContent>
         </Tabs>
       </div>
+
+      <SettlementModal
+        open={!!settlementReservation}
+        onOpenChange={(open) => {
+          if (!open) setSettlementReservation(null);
+        }}
+        guestName={settlementReservation?.guest_name ?? ""}
+        bookingCode={settlementReservation?.booking_code ?? ""}
+        reservationId={settlementReservation?.id ?? ""}
+        onConfirm={handleCheckoutConfirm}
+      />
     </AppLayout>
   );
 }

@@ -322,18 +322,22 @@ on conflict (role, module) do update set
 
 -- -----------------------------------------------------------------------------
 -- 8. Demo users (password123 via bcrypt in seed / app)
+-- Fixed UUIDs match src/app/api/auth/login/route.ts for assignments.
 -- -----------------------------------------------------------------------------
-insert into public.hotel_management_users (email, password_hash, full_name, role)
+insert into public.hotel_management_users (id, email, password_hash, full_name, role)
 values
-  ('admin@iimdemo.com', crypt('password123', gen_salt('bf', 10)), 'Demo Admin', 'admin'),
-  ('frontdesk@iimdemo.com', crypt('password123', gen_salt('bf', 10)), 'Demo Front Desk', 'front_desk'),
-  ('housekeeping@iimdemo.com', crypt('password123', gen_salt('bf', 10)), 'Demo Housekeeping', 'housekeeping'),
-  ('maintenance1@iimdemo.com', crypt('password123', gen_salt('bf', 10)), 'Maintenance Staff 1', 'maintenance_staff'),
-  ('fnb@iimdemo.com', crypt('password123', gen_salt('bf', 10)), 'Demo F&B Manager', 'fnb_manager'),
-  ('accounts@iimdemo.com', crypt('password123', gen_salt('bf', 10)), 'Demo Accounts', 'accounts')
+  ('00000000-0000-0000-0000-000000000011', 'admin@iimdemo.com', crypt('password123', gen_salt('bf', 10)), 'Demo Admin', 'admin'),
+  ('00000000-0000-0000-0000-000000000012', 'frontdesk@iimdemo.com', crypt('password123', gen_salt('bf', 10)), 'Demo Front Desk', 'front_desk'),
+  ('00000000-0000-0000-0000-000000000013', 'housekeeping@iimdemo.com', crypt('password123', gen_salt('bf', 10)), 'Demo Housekeeping', 'housekeeping'),
+  ('00000000-0000-0000-0000-000000000016', 'housekeeping1@iimdemo.com', crypt('password123', gen_salt('bf', 10)), 'Housekeeping Staff 1', 'housekeeping'),
+  ('00000000-0000-0000-0000-000000000017', 'housekeeping2@iimdemo.com', crypt('password123', gen_salt('bf', 10)), 'Housekeeping Staff 2', 'housekeeping'),
+  ('00000000-0000-0000-0000-000000000018', 'maintenance1@iimdemo.com', crypt('password123', gen_salt('bf', 10)), 'Maintenance Staff 1', 'maintenance_staff'),
+  ('00000000-0000-0000-0000-000000000014', 'fnb@iimdemo.com', crypt('password123', gen_salt('bf', 10)), 'Demo F&B Manager', 'fnb_manager'),
+  ('00000000-0000-0000-0000-000000000015', 'accounts@iimdemo.com', crypt('password123', gen_salt('bf', 10)), 'Demo Accounts', 'accounts')
 on conflict (email) do update set
   full_name = excluded.full_name,
   role = excluded.role,
+  password_hash = excluded.password_hash,
   is_active = true;
 
 -- -----------------------------------------------------------------------------
@@ -413,6 +417,17 @@ drop policy if exists "checkins_write" on public.hotel_management_checkins;
 create policy "checkins_write" on public.hotel_management_checkins for all
   using (public.has_permission('checkin_checkout', 'update') or public.has_permission('checkin_checkout', 'create'))
   with check (public.has_permission('checkin_checkout', 'update') or public.has_permission('checkin_checkout', 'create'));
+
+-- Housekeeping tasks — extended columns (safe to re-run)
+alter table public.hotel_management_housekeeping_tasks
+  add column if not exists task_type text default 'cleaning',
+  add column if not exists due_date timestamptz,
+  add column if not exists created_by uuid references public.hotel_management_users(id) on delete set null;
+
+create index if not exists idx_hm_hk_assigned_to
+  on public.hotel_management_housekeeping_tasks (assigned_to);
+create index if not exists idx_hm_hk_status
+  on public.hotel_management_housekeeping_tasks (status);
 
 -- Housekeeping tasks
 drop policy if exists "hk_select" on public.hotel_management_housekeeping_tasks;

@@ -1,8 +1,6 @@
 "use client";
 
-import Link from "next/link";
-import { Button } from "@/components/ui/button";
-import { KpiGrid, QuickLinks } from "./DashboardShell";
+import { KpiGrid, QuickLinks, TaskList } from "./DashboardShell";
 import { formatCurrency } from "@/lib/utils";
 
 interface FnbData {
@@ -21,9 +19,13 @@ export function FnbDashboard({ data }: { data: FnbData }) {
     <div className="space-y-6">
       <KpiGrid
         items={[
-          { label: "Orders Today", value: String(kpi.ordersToday), color: "" },
-          { label: "Pending", value: String(kpi.pending), color: "" },
-          { label: "F&B Revenue Today", value: formatCurrency(kpi.fnbRevenueToday), color: "" },
+          { label: "Orders Today", value: String(kpi.ordersToday), accent: "border-l-blue-500" },
+          { label: "Pending", value: String(kpi.pending), accent: "border-l-amber-500" },
+          {
+            label: "F&B Revenue Today",
+            value: formatCurrency(kpi.fnbRevenueToday),
+            accent: "border-l-green-500",
+          },
         ]}
       />
 
@@ -34,31 +36,19 @@ export function FnbDashboard({ data }: { data: FnbData }) {
         ]}
       />
 
-      <div className="rounded-lg border bg-white p-4">
-        <h3 className="font-semibold text-base mb-3">Recent Orders</h3>
-        {recentOrders.length === 0 ? (
-          <p className="text-sm text-gray-400 text-center py-4">No orders today</p>
-        ) : (
-          <ul className="space-y-2">
-            {recentOrders.map((o) => (
-              <li
-                key={o.id}
-                className="flex justify-between text-sm border-b py-2 last:border-0"
-              >
-                <span>{o.order_code}</span>
-                <span className="capitalize text-gray-500">{o.status}</span>
-                <span className="font-medium">{formatCurrency(o.total_amount)}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-
-      <div className="flex justify-center">
-        <Link href="/fnb">
-          <Button>Open F&B POS</Button>
-        </Link>
-      </div>
+      <TaskList
+        title="Recent Orders"
+        empty="No orders today"
+        footerHref="/fnb"
+        footerLabel="Open F&B POS"
+        items={recentOrders.map((o) => ({
+          id: o.id,
+          primary: o.order_code,
+          secondary: formatCurrency(o.total_amount),
+          badge: o.status,
+          href: "/fnb",
+        }))}
+      />
     </div>
   );
 }

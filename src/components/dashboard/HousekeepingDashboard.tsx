@@ -1,7 +1,5 @@
 "use client";
 
-import Link from "next/link";
-import { Button } from "@/components/ui/button";
 import { KpiGrid, QuickLinks, TaskList } from "./DashboardShell";
 
 interface HkTask {
@@ -26,15 +24,34 @@ interface HousekeepingData {
 
 export function HousekeepingDashboard({ data }: { data: HousekeepingData }) {
   const { kpi, myTasks } = data;
+  const activeTasks = myTasks.filter((t) =>
+    ["dirty", "assigned", "cleaning"].includes(t.status)
+  );
 
   return (
     <div className="space-y-6">
       <KpiGrid
         items={[
-          { label: "My Tasks Today", value: String(kpi.assignedToday), color: "" },
-          { label: "Pending / Dirty", value: String(kpi.dirty), color: "" },
-          { label: "In Progress", value: String(kpi.inProgress), color: "" },
-          { label: "Completed", value: String(kpi.completed), color: "" },
+          {
+            label: "My Tasks Today",
+            value: String(kpi.assignedToday),
+            accent: "border-l-blue-500",
+          },
+          {
+            label: "Pending / Dirty",
+            value: String(kpi.dirty),
+            accent: "border-l-red-500",
+          },
+          {
+            label: "In Progress",
+            value: String(kpi.inProgress),
+            accent: "border-l-amber-500",
+          },
+          {
+            label: "Completed",
+            value: String(kpi.completed),
+            accent: "border-l-green-500",
+          },
         ]}
       />
 
@@ -47,21 +64,19 @@ export function HousekeepingDashboard({ data }: { data: HousekeepingData }) {
       />
 
       <TaskList
-        title="My Assigned Rooms & Tasks"
-        empty="No tasks assigned to you today"
-        items={myTasks.map((t) => ({
+        title="My active tasks"
+        empty="No active tasks assigned to you"
+        footerHref="/housekeeping"
+        footerLabel="Go to Housekeeping Board"
+        items={activeTasks.map((t) => ({
           id: t.id,
-          primary: `Room ${t.room} (Floor ${t.floor})`,
-          secondary: [t.task_type, t.notes].filter(Boolean).join(" · ") || undefined,
+          primary: `Room ${t.room} · Floor ${t.floor}`,
+          secondary: [t.task_type?.replace(/_/g, " "), t.notes].filter(Boolean).join(" · ") || undefined,
           badge: t.status,
+          priority: t.priority,
+          href: "/housekeeping",
         }))}
       />
-
-      <div className="flex justify-center">
-        <Link href="/housekeeping">
-          <Button>Go to Housekeeping Board</Button>
-        </Link>
-      </div>
     </div>
   );
 }

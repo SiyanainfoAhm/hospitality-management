@@ -78,7 +78,24 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  return NextResponse.json({ invoices: formatted });
+  const { data: payments, error: payErr } = await supabase
+    .from("hotel_management_payments")
+    .select("amount");
+
+  const totalCollected = payErr
+    ? formatted.reduce((sum, i) => sum + i.paid, 0)
+    : (payments ?? []).reduce((sum, p) => sum + Number(p.amount), 0);
+
+  const totalPending = formatted.reduce((sum, i) => sum + i.balance, 0);
+
+  return NextResponse.json({
+    invoices: formatted,
+    kpis: {
+      total_collected: totalCollected,
+      pending_amount: totalPending,
+      total_invoices: formatted.length,
+    },
+  });
 }
 
 export async function POST() {

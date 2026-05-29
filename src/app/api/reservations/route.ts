@@ -1,6 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { requirePermission, setDbRequestContext } from "@/lib/auth/permissions-server";
+import { generateBookingCode } from "@/lib/utils";
+
+const RATE_PLAN_PREFIX: Record<string, string> = {
+  rack: "Rack Rate",
+  corporate: "Corporate Rate",
+  government: "Government Rate",
+  long_stay: "Long Stay",
+};
 
 export async function GET(request: NextRequest) {
   const sessionOrDeny = await requirePermission("reservations", "view");
@@ -86,4 +94,147 @@ export async function GET(request: NextRequest) {
   }
 
   return NextResponse.json({ reservations: formatted });
+}
+
+export async function POST(request: NextRequest) {
+  const sessionOrDeny = await requirePermission("reservations", "create");
+  if (sessionOrDeny instanceof NextResponse) return sessionOrDeny;
+  await setDbRequestContext(sessionOrDeny.sub, sessionOrDeny.role);
+
+  const supabase = createServerSupabaseClient();
+  const body = await request.json();
+
+  const {
+    guest_name,
+    mobile,
+    email,
+    id_proof_type,
+    id_proof_number,
+    room_id,
+    check_in_date,
+    check_out_date,
+    adults = 1,
+    children = 0,
+    rate_plan = "rack",
+    deposit_amount = 0,
+    source = "direct",
+    notes,
+  } = body;
+
+  if (!guest_name || !mobile || !room_id || !check_in_date || !check_out_date) {
+    return NextResponse.json(
+      { error: "Guest name, mobile, room, check-in and check-out are required" },
+      { status: 400 }
+    );
+  }
+
+  if (new Date(check_out_date) <= new Date(check_in_date)) {
+    return NextResponse.json(
+      { error: "Check-out must be after check-in" },
+      { status: 400 }
+    );
+  }
+
+  const { data: room, error: roomError } = await supabase
+    .from("hotel_management_rooms")
+    .select("id, room_number, room_type_id, status")
+    .eq("id", room_id)
+    .single();
+
+  if (roomError || !room) {
+    return NextResponse.json({ error: "Room not found" }, { status: 404 });
+  }
+
+  if (room.status !== "available") {
+    return NextResponse.json(
+      { error: `Room ${room.room_number} is not available (${room.status})` },
+      { status: 409 }
+    );
+  }
+
+  const planPrefix = RATE_PLAN_PREFIX[rate_plan] ?? RATE_PLAN_PREFIX.rack;
+  const { data: ratePlanRow } = await supabase
+    .from("hotel_management_rate_plans")
+    .select("id, rate")
+    .eq("room_type_id", room.room_type_id)
+    .ilike("name", `${planPrefix}%`)
+    .limit(1)
+    .maybeSingle();
+
+  const { data: guest, error: guestError } = await supabase
+    .from("hotel_management_guests")
+    .insert({
+      full_name: guest_name,
+      mobile,
+      email: email || null,
+      id_proof_type: id_proof_type || null,
+      id_proof_number: id_proof_number || null,
+    })
+    .select("id")
+    .single();
+
+  if (guestError || !guest) {
+    return NextResponse.json({ error: guestError?.message ?? "Failed to create guest" }, { status: 500 });
+  }
+
+  const nights = Math.max(
+    1,
+    Math.ceil(
+      (new Date(check_out_date).getTime() - new Date(check_in_date).getTime()) /
+        86400000
+    )
+  );
+  const nightlyRate = Number(ratePlanRow?.rate ?? 0);
+  const total_amount = nightlyRate * nights;
+
+  let booking_code = generateBookingCode();
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const { data: existing } = await supabase
+      .from("hotel_management_reservations")
+      .select("id")
+      .eq("booking_code", booking_code)
+      .maybeSingle();
+    if (!existing) break;
+    booking_code = generateBookingCode();
+  }
+
+  const { data: reservation, error: reservationError } = await supabase
+    .from("hotel_management_reservations")
+    .insert({
+      booking_code,
+      guest_id: guest.id,
+      room_id,
+      check_in_date,
+      check_out_date,
+      adults: Number(adults),
+      children: Number(children),
+      rate_plan_id: ratePlanRow?.id ?? null,
+      status: "confirmed",
+      deposit_amount: Number(deposit_amount) || 0,
+      total_amount,
+      source,
+      notes: notes || null,
+    })
+    .select("id, booking_code")
+    .single();
+
+  if (reservationError || !reservation) {
+    return NextResponse.json(
+      { error: reservationError?.message ?? "Failed to create reservation" },
+      { status: 500 }
+    );
+  }
+
+  await supabase
+    .from("hotel_management_rooms")
+    .update({ status: "reserved" })
+    .eq("id", room_id);
+
+  return NextResponse.json({
+    success: true,
+    reservation: {
+      id: reservation.id,
+      booking_code: reservation.booking_code,
+    },
+  });
 }

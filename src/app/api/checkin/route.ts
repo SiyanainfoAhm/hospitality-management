@@ -1,6 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { requirePermission, setDbRequestContext } from "@/lib/auth/permissions-server";
+import { canRecordInvoicePayment, normalizeRole } from "@/config/rbac";
+import {
+  ensureCheckoutInvoice,
+  getSettlementPreview,
+  recordInvoicePayment,
+  applyDepositCreditIfNeeded,
+  setInvoiceStatusAfterSettlement,
+  type PaymentMode,
+} from "@/lib/billing-server";
 
 export async function GET() {
   const sessionOrDeny = await requirePermission("checkin_checkout", "view");
@@ -177,9 +186,16 @@ export async function POST(request: NextRequest) {
   }
 
   if (action === "checkout") {
+    const settlement = body.settlement as {
+      amount_received?: number;
+      payment_mode?: PaymentMode;
+      reference_number?: string;
+      remarks?: string;
+    } | undefined;
+
     const { data: reservation } = await supabase
       .from("hotel_management_reservations")
-      .select("id, room_id")
+      .select("id, room_id, deposit_amount, status")
       .eq("id", reservation_id)
       .single();
 
@@ -187,26 +203,91 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Reservation not found" }, { status: 404 });
     }
 
-    // Update reservation status
+    if (reservation.status !== "checked_in") {
+      return NextResponse.json({ error: "Guest is not checked in" }, { status: 400 });
+    }
+
+    const ensured = await ensureCheckoutInvoice(supabase, reservation_id);
+    if (ensured.error || !ensured.invoiceId) {
+      return NextResponse.json(
+        { error: ensured.error ?? "Invoice must be generated before checkout" },
+        { status: 400 }
+      );
+    }
+
+    await applyDepositCreditIfNeeded(
+      supabase,
+      ensured.invoiceId,
+      Number(reservation.deposit_amount ?? 0)
+    );
+
+    const amountReceived = Number(settlement?.amount_received ?? 0);
+    const paymentMode = settlement?.payment_mode;
+
+    if (amountReceived > 0) {
+      if (!paymentMode) {
+        return NextResponse.json(
+          { error: "payment_mode is required when amount_received > 0" },
+          { status: 400 }
+        );
+      }
+
+      const role = normalizeRole(sessionOrDeny.role);
+      if (!canRecordInvoicePayment(role, "checkout")) {
+        return NextResponse.json(
+          { error: "Forbidden", message: "You do not have permission to record checkout settlement" },
+          { status: 403 }
+        );
+      }
+
+      const payResult = await recordInvoicePayment(supabase, {
+        invoiceId: ensured.invoiceId,
+        amount: amountReceived,
+        paymentMode,
+        referenceNumber: settlement?.reference_number ?? null,
+        remarks: settlement?.remarks ?? "Checkout settlement",
+      });
+
+      if (!payResult.success) {
+        return NextResponse.json({ error: payResult.error ?? "Payment recording failed" }, { status: 400 });
+      }
+    } else if (paymentMode === "bill_to_company") {
+      await supabase
+        .from("hotel_management_invoices")
+        .update({
+          notes: settlement?.remarks ?? "Bill to company — balance due",
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", ensured.invoiceId);
+    }
+
+    const invoiceStatus = await setInvoiceStatusAfterSettlement(supabase, ensured.invoiceId);
+    const { settlement: finalSettlement } = await getSettlementPreview(supabase, reservation_id);
+
     await supabase
       .from("hotel_management_reservations")
       .update({ status: "checked_out" })
       .eq("id", reservation_id);
 
-    // Update room status to dirty (needs cleaning)
     await supabase
       .from("hotel_management_rooms")
       .update({ status: "dirty" })
       .eq("id", reservation.room_id);
 
-    // Update checkin record with checkout time
     await supabase
       .from("hotel_management_checkins")
       .update({ checked_out_at: new Date().toISOString() })
       .eq("reservation_id", reservation_id)
       .is("checked_out_at", null);
 
-    return NextResponse.json({ success: true, message: "Guest checked out" });
+    return NextResponse.json({
+      success: true,
+      message: "Guest checked out",
+      invoice_id: ensured.invoiceId,
+      invoice_number: ensured.invoiceNumber,
+      invoice_status: invoiceStatus,
+      settlement: finalSettlement,
+    });
   }
 
   return NextResponse.json({ error: "Invalid action" }, { status: 400 });

@@ -69,9 +69,9 @@ ALTER TABLE public.hotel_management_rooms
 -- 4. Demo users (fixed UUIDs for assignments)
 INSERT INTO public.hotel_management_users (id, email, password_hash, full_name, role)
 VALUES
-  ('h1000000-0000-0000-0000-000000000001', 'housekeeping1@iimdemo.com', crypt('password123', gen_salt('bf', 10)), 'Housekeeping Staff 1', 'housekeeping'),
-  ('h1000000-0000-0000-0000-000000000002', 'housekeeping2@iimdemo.com', crypt('password123', gen_salt('bf', 10)), 'Housekeeping Staff 2', 'housekeeping'),
-  ('m1000000-0000-0000-0000-000000000001', 'maintenance1@iimdemo.com', crypt('password123', gen_salt('bf', 10)), 'Maintenance Staff 1', 'maintenance_staff')
+  ('00000000-0000-0000-0000-000000000016', 'housekeeping1@iimdemo.com', crypt('password123', gen_salt('bf', 10)), 'Housekeeping Staff 1', 'housekeeping'),
+  ('00000000-0000-0000-0000-000000000017', 'housekeeping2@iimdemo.com', crypt('password123', gen_salt('bf', 10)), 'Housekeeping Staff 2', 'housekeeping'),
+  ('00000000-0000-0000-0000-000000000018', 'maintenance1@iimdemo.com', crypt('password123', gen_salt('bf', 10)), 'Maintenance Staff 1', 'maintenance_staff')
 ON CONFLICT (email) DO UPDATE SET
   full_name = EXCLUDED.full_name,
   role = EXCLUDED.role,
@@ -81,14 +81,14 @@ ON CONFLICT (email) DO UPDATE SET
 UPDATE public.hotel_management_users
 SET email = 'housekeeping@iimdemo.com', full_name = 'Demo Housekeeping (legacy)'
 WHERE email = 'housekeeping@iimdemo.com' AND id NOT IN (
-  'h1000000-0000-0000-0000-000000000001',
-  'h1000000-0000-0000-0000-000000000002'
+  '00000000-0000-0000-0000-000000000016',
+  '00000000-0000-0000-0000-000000000017'
 );
 
 -- 5. Assign demo tasks (by room number)
 UPDATE public.hotel_management_housekeeping_tasks t
 SET
-  assigned_to = 'h1000000-0000-0000-0000-000000000001',
+  assigned_to = '00000000-0000-0000-0000-000000000016',
   status = 'assigned',
   task_type = 'cleaning',
   priority = 'high',
@@ -98,7 +98,7 @@ WHERE t.room_id = r.id AND r.room_number = '110';
 
 UPDATE public.hotel_management_housekeeping_tasks t
 SET
-  assigned_to = 'h1000000-0000-0000-0000-000000000001',
+  assigned_to = '00000000-0000-0000-0000-000000000016',
   status = 'assigned',
   task_type = 'linen_change',
   priority = 'urgent'
@@ -107,7 +107,7 @@ WHERE t.room_id = r.id AND r.room_number = '215';
 
 UPDATE public.hotel_management_housekeeping_tasks t
 SET
-  assigned_to = 'h1000000-0000-0000-0000-000000000002',
+  assigned_to = '00000000-0000-0000-0000-000000000017',
   status = 'assigned',
   task_type = 'deep_cleaning',
   priority = 'normal'
@@ -116,68 +116,23 @@ WHERE t.room_id = r.id AND r.room_number = '307';
 
 UPDATE public.hotel_management_housekeeping_tasks t
 SET
-  assigned_to = 'h1000000-0000-0000-0000-000000000002',
+  assigned_to = '00000000-0000-0000-0000-000000000017',
   status = 'clean',
   task_type = 'inspection',
   priority = 'normal'
 FROM public.hotel_management_rooms r
 WHERE t.room_id = r.id AND r.room_number = '403';
 
--- Maintenance demo assignments
-UPDATE public.hotel_management_maintenance_requests m
-SET
-  assigned_to = 'm1000000-0000-0000-0000-000000000001',
-  status = 'assigned',
-  issue_type = 'ac',
-  title = 'AC unit malfunction',
-  priority = 'high'
-FROM public.hotel_management_rooms r
-WHERE m.room_id = r.id AND r.room_number = '304';
+-- Remove static under-repair housekeeping tasks (use live maintenance requests instead)
+delete from public.hotel_management_housekeeping_tasks
+where status = 'under_repair';
 
-UPDATE public.hotel_management_maintenance_requests m
-SET
-  assigned_to = 'm1000000-0000-0000-0000-000000000001',
-  status = 'open',
-  issue_type = 'plumbing',
-  title = 'Plumbing leak',
-  priority = 'urgent'
-FROM public.hotel_management_rooms r
-WHERE m.room_id = r.id AND r.room_number = '408';
-
--- Insert maintenance rows if seed did not create 304/408 issues yet
-INSERT INTO public.hotel_management_maintenance_requests (
-  id, room_id, title, description, priority, status, issue_type, assigned_to, reported_at
-)
-SELECT
-  'm2000000-0000-0000-0000-000000000001',
-  r.id,
-  'AC unit malfunction',
-  'AC not cooling — technician required',
-  'high',
-  'assigned',
-  'ac',
-  'm1000000-0000-0000-0000-000000000001',
-  now()
-FROM public.hotel_management_rooms r
-WHERE r.room_number = '304'
-ON CONFLICT (id) DO NOTHING;
-
-INSERT INTO public.hotel_management_maintenance_requests (
-  id, room_id, title, description, priority, status, issue_type, assigned_to, reported_at
-)
-SELECT
-  'm2000000-0000-0000-0000-000000000002',
-  r.id,
-  'Plumbing leak',
-  'Bathroom leak reported',
-  'urgent',
-  'assigned',
-  'plumbing',
-  'm1000000-0000-0000-0000-000000000001',
-  now()
-FROM public.hotel_management_rooms r
-WHERE r.room_number = '408'
-ON CONFLICT (id) DO NOTHING;
+-- Optional: remove demo maintenance rows that conflict with real reports
+delete from public.hotel_management_maintenance_requests
+where id in (
+  'c3000000-0000-0000-0000-000000000001',
+  'c3000000-0000-0000-0000-000000000002'
+);
 
 -- 6. Permissions table sync for maintenance_staff (if using DB permissions)
 INSERT INTO public.hotel_management_permissions (role, module, can_view, can_create, can_update, can_delete)

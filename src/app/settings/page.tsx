@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { AppLayout } from "@/components/layout/app-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -66,13 +66,7 @@ interface FnbItem {
   veg: boolean;
 }
 
-const initialUsers: UserItem[] = [
-  { id: "1", name: "Admin User", email: "admin@iimn.ac.in", role: "admin", status: "active" },
-  { id: "2", name: "Priya Sharma", email: "frontdesk@iimn.ac.in", role: "front_desk", status: "active" },
-  { id: "3", name: "Ramesh Kumar", email: "hk@iimn.ac.in", role: "housekeeping", status: "active" },
-  { id: "4", name: "Suresh Patel", email: "fnb@iimn.ac.in", role: "fnb", status: "active" },
-  { id: "5", name: "Anita Verma", email: "accounts@iimn.ac.in", role: "accounts", status: "active" },
-];
+const initialUsers: UserItem[] = [];
 
 const initialRoomTypes: RoomTypeItem[] = [
   { id: "1", name: "Standard Single", baseRate: 2500, maxOccupancy: 1, count: 38, amenities: ["AC", "TV", "WiFi", "Desk"] },
@@ -107,8 +101,10 @@ const rolePermissions = [
 ];
 
 export default function SettingsPage() {
+  const [activeTab, setActiveTab] = useState("users");
   // Users state
   const [users, setUsers] = useState<UserItem[]>(initialUsers);
+  const [usersLoading, setUsersLoading] = useState(true);
   const [userDialogOpen, setUserDialogOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<UserItem | null>(null);
   const [userForm, setUserForm] = useState({
@@ -120,6 +116,46 @@ export default function SettingsPage() {
   });
   const [savingUser, setSavingUser] = useState(false);
   const { hasPermission } = useAuth();
+
+  useEffect(() => {
+    const tab = new URLSearchParams(window.location.search).get("tab");
+    if (tab) setActiveTab(tab);
+  }, []);
+
+  useEffect(() => {
+    if (!hasPermission("user_management", "view")) {
+      setUsersLoading(false);
+      return;
+    }
+    setUsersLoading(true);
+    fetch("/api/users/staff?include_inactive=true")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.users) {
+          setUsers(
+            data.users.map(
+              (u: {
+                id: string;
+                full_name: string;
+                email: string;
+                role: string;
+                is_active?: boolean;
+              }) => ({
+                id: u.id,
+                name: u.full_name,
+                email: u.email,
+                role: u.role,
+                status: u.is_active !== false ? "active" : "inactive",
+              })
+            )
+          );
+        } else if (data.error) {
+          toast.error(data.error);
+        }
+      })
+      .catch(() => toast.error("Failed to load users"))
+      .finally(() => setUsersLoading(false));
+  }, [hasPermission]);
 
   // Room types state
   const [roomTypes, setRoomTypes] = useState<RoomTypeItem[]>(initialRoomTypes);
@@ -362,7 +398,7 @@ export default function SettingsPage() {
           <p className="text-sm text-gray-500">System configuration and administration</p>
         </div>
 
-        <Tabs defaultValue="users">
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList>
             <TabsTrigger value="users"><Users className="h-4 w-4 mr-2" /> Users</TabsTrigger>
             <TabsTrigger value="roles"><Shield className="h-4 w-4 mr-2" /> Roles</TabsTrigger>
@@ -394,7 +430,20 @@ export default function SettingsPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {users.map((user) => (
+                    {usersLoading ? (
+                      <tr>
+                        <td colSpan={5} className="px-4 py-8 text-center text-sm text-gray-500">
+                          Loading users...
+                        </td>
+                      </tr>
+                    ) : users.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="px-4 py-8 text-center text-sm text-gray-500">
+                          No users found
+                        </td>
+                      </tr>
+                    ) : (
+                    users.map((user) => (
                       <tr key={user.id} className="border-b border-gray-50 hover:bg-gray-50/50">
                         <td className="px-4 py-3 text-sm font-medium">{user.name}</td>
                         <td className="px-4 py-3 text-sm text-gray-600">{user.email}</td>
@@ -417,7 +466,8 @@ export default function SettingsPage() {
                           </div>
                         </td>
                       </tr>
-                    ))}
+                    ))
+                    )}
                   </tbody>
                 </table>
               </CardContent>

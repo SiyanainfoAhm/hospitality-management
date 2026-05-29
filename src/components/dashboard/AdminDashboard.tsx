@@ -27,14 +27,14 @@ export function AdminDashboard({ data }: { data: AdminData }) {
     <div className="space-y-6">
       <KpiGrid
         items={[
-          { label: "Total Rooms", value: String(kpi.totalRooms), color: "" },
-          { label: "Occupied", value: String(kpi.occupied), color: "" },
-          { label: "Available", value: String(kpi.available), color: "" },
-          { label: "Revenue Today", value: formatCurrency(kpi.revenueToday), color: "" },
-          { label: "Check-ins", value: String(kpi.todayCheckins), color: "" },
-          { label: "Check-outs", value: String(kpi.todayCheckouts), color: "" },
-          { label: "Dirty", value: String(kpi.dirty), color: "" },
-          { label: "Maint. Open", value: String(maintenancePending), color: "" },
+          { label: "Total Rooms", value: String(kpi.totalRooms), accent: "border-l-slate-500" },
+          { label: "Occupied", value: String(kpi.occupied), accent: "border-l-green-500" },
+          { label: "Available", value: String(kpi.available), accent: "border-l-blue-500" },
+          { label: "Revenue Today", value: formatCurrency(kpi.revenueToday), accent: "border-l-emerald-500" },
+          { label: "Check-ins", value: String(kpi.todayCheckins), accent: "border-l-violet-500" },
+          { label: "Check-outs", value: String(kpi.todayCheckouts), accent: "border-l-amber-500" },
+          { label: "Dirty", value: String(kpi.dirty), accent: "border-l-red-500" },
+          { label: "Maint. Open", value: String(maintenancePending), accent: "border-l-orange-500" },
         ]}
       />
 
